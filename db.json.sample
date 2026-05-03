@@ -1,0 +1,12 @@
+{
+  "test": {
+    "type": "mysql",
+    "user": "star",
+    "password": "...",
+    "host": "localhost:3306",
+    "db": "test",
+    "maxOpens": 100,
+    "maxIdles": 30,
+    "maxLifeTime": 3600
+  }
+}

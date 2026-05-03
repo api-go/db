@@ -1,0 +1,11 @@
+package main
+
+import "apigo.cc/go/db"
+
+func init() {
+	// 强烈建议在应用启动时设置自定义加密密钥，确保数据库密码存储安全
+	// key 和 iv 建议通过环境变量或安全存储获取，不要直接硬编码在生产代码中
+	key := []byte("your-32-byte-long-secure-key----")
+	iv := []byte("your-16-byte-iv-")
+	db.SetEncryptKeys(key, iv)
+}
