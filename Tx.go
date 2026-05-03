@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -173,7 +174,17 @@ func (tx *Tx) Delete(table string, conditions string, args ...any) *ExecResult {
 
 	if ts.HasShadowTable {
 		// Move to shadow table
-		moveQuery := fmt.Sprintf("insert into %s select * from %s%s", tx.Quote(table+"_deleted"), tx.Quote(table), where)
+		colList := ""
+		if len(ts.Columns) > 0 {
+			quotedCols := make([]string, len(ts.Columns))
+			for i, c := range ts.Columns {
+				quotedCols[i] = tx.Quote(c)
+			}
+			colList = fmt.Sprintf(" (%s) select %s", strings.Join(quotedCols, ","), strings.Join(quotedCols, ","))
+		} else {
+			colList = " select *"
+		}
+		moveQuery := fmt.Sprintf("insert into %s%s from %s%s", tx.Quote(table+"_deleted"), colList, tx.Quote(table), where)
 		r := baseExec(nil, tx.conn, moveQuery, args...)
 		if r.Error != nil {
 			tx.logger.LogQueryError(r.Error.Error(), moveQuery, args, r.usedTime)

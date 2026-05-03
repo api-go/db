@@ -197,8 +197,26 @@ type DB struct {
 }
 
 type TableStruct struct {
-	VersionField   string
+	Name           string
+	Comment        string
+	Fields         []TableField
+	Columns        []string
+	ShadowDelete   bool
 	HasShadowTable bool
+	VersionField   string
+}
+
+type TableField struct {
+	Name       string
+	Type       string
+	Index      string
+	IndexGroup string
+	Default    string
+	Comment    string
+	Null       string
+	Extra      string
+	Desc       string
+	IsVersion  bool
 }
 
 var confAes, _ = crypto.NewAESCBCAndEraseKey([]byte("?GQ$0K0GgLdO=f+~L68PLm$uhKr4'=tV"), []byte("VFs7@sK61cj^f?HZ"))
@@ -654,14 +672,19 @@ func (db *DB) getTable(table string) *TableStruct {
 		return ts
 	}
 
-	ts = &TableStruct{}
-	// Probe autoVersion
+	ts = &TableStruct{Name: table}
+	// Probe columns and autoVersion
 	var query string
 	if db.Config.Type == "mysql" {
-		query = "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = 'autoVersion' AND DATA_TYPE = 'bigint' AND COLUMN_TYPE LIKE '%unsigned%'"
+		query = "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?"
 		res := db.Query(query, db.Config.DB, table)
-		if res.StringOnR1C1() != "" {
-			ts.VersionField = "autoVersion"
+		cols := res.StringsOnC1()
+		ts.Columns = cols
+		for _, col := range cols {
+			if col == "autoVersion" {
+				ts.VersionField = "autoVersion"
+				break
+			}
 		}
 	} else if isFileDB(db.Config.Type) {
 		// For SQLite
@@ -669,9 +692,10 @@ func (db *DB) getTable(table string) *TableStruct {
 		res := db.Query(query)
 		rows := res.MapResults()
 		for _, row := range rows {
-			if cast.String(row["name"]) == "autoVersion" {
+			colName := cast.String(row["name"])
+			ts.Columns = append(ts.Columns, colName)
+			if colName == "autoVersion" {
 				ts.VersionField = "autoVersion"
-				break
 			}
 		}
 	}
