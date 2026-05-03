@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"apigo.cc/go/cast"
@@ -19,6 +20,7 @@ import (
 	"apigo.cc/go/id"
 	"apigo.cc/go/log"
 	"apigo.cc/go/rand"
+	"apigo.cc/go/redis"
 	"apigo.cc/go/safe"
 )
 
@@ -37,6 +39,7 @@ type Config struct {
 	MaxIdles      int
 	MaxLifeTime   int
 	LogSlow       config.Duration
+	VersionRedis  string
 	logger        *log.Logger
 }
 
@@ -140,6 +143,7 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 	dbInfo.MaxLifeTime = cast.Int(q.Get("maxLifeTime"))
 	dbInfo.MaxOpens = cast.Int(q.Get("maxOpens"))
 	dbInfo.LogSlow = config.Duration(cast.Duration(q.Get("logSlow")))
+	dbInfo.VersionRedis = q.Get("versionRedis")
 	dbInfo.SSL = q.Get("tls")
 
 	sslCa := q.Get("sslCA")
@@ -171,7 +175,7 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 
 	args := make([]string, 0)
 	for k := range q {
-		if k != "maxIdles" && k != "maxLifeTime" && k != "maxOpens" && k != "logSlow" && k != "tls" {
+		if k != "maxIdles" && k != "maxLifeTime" && k != "maxOpens" && k != "logSlow" && k != "tls" && k != "versionRedis" {
 			args = append(args, k+"="+q.Get(k))
 		}
 	}
@@ -229,7 +233,20 @@ var dbConfigsLock = sync.RWMutex{}
 var dbSSLs = make(map[string]*SSL)
 var dbInstances = make(map[string]*DB)
 var dbInstancesLock = sync.RWMutex{}
+var globalVersionMap = sync.Map{}
 var once sync.Once
+
+func (db *DB) NextVersion(key string) int64 {
+	if db.Config.VersionRedis != "" {
+		r := redis.GetRedis(db.Config.VersionRedis, db.logger.logger)
+		if r != nil {
+			return r.INCR("db_ver_" + key)
+		}
+	}
+
+	v, _ := globalVersionMap.LoadOrStore(key, new(int64))
+	return atomic.AddInt64(v.(*int64), 1)
+}
 
 func GetDBWithoutCache(name string, logger *log.Logger) *DB {
 	return getDB(name, logger, false)
@@ -503,14 +520,14 @@ func (db *DB) Quotes(texts []string) string {
 
 func (db *DB) Begin() *Tx {
 	if db.conn == nil {
-		return &Tx{QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), Error: errors.New("operate on a bad connection"), logger: db.logger}
+		return &Tx{db: db, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), Error: errors.New("operate on a bad connection"), logger: db.logger}
 	}
 	sqlTx, err := db.conn.Begin()
 	if err != nil {
 		db.logger.LogError(err.Error())
-		return &Tx{QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), Error: err, logger: db.logger}
+		return &Tx{db: db, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), Error: err, logger: db.logger}
 	}
-	return &Tx{QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), conn: sqlTx, logger: db.logger}
+	return &Tx{db: db, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), conn: sqlTx, logger: db.logger}
 }
 
 func (db *DB) Exec(query string, args ...any) *ExecResult {

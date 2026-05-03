@@ -9,6 +9,7 @@ import (
 
 type Tx struct {
 	conn                    *sql.Tx
+	db                      *DB
 	lastSql                 *string
 	lastArgs                []any
 	Error                   error
