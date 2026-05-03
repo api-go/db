@@ -140,7 +140,7 @@ func quotes(quoteTag string, texts []string) string {
 	return strings.Join(texts, ",")
 }
 
-func makeInsertSql(quoteTag string, table string, data any, useReplace bool, versionField string, nextVer int64) (string, []any) {
+func makeInsertSql(quoteTag string, table string, data any, useReplace bool, versionField string, nextVer int64, idField string, nextId string) (string, []any) {
 	keys, vars, values := MakeKeysVarsValues(data)
 	if versionField != "" {
 		found := false
@@ -154,6 +154,23 @@ func makeInsertSql(quoteTag string, table string, data any, useReplace bool, ver
 			keys = append(keys, versionField)
 			vars = append(vars, "?")
 			values = append(values, nextVer)
+		}
+	}
+	if idField != "" && nextId != "" {
+		found := false
+		for i, k := range keys {
+			if k == idField {
+				found = true
+				if cast.String(values[i]) == "" {
+					values[i] = nextId
+				}
+				break
+			}
+		}
+		if !found {
+			keys = append(keys, idField)
+			vars = append(vars, "?")
+			values = append(values, nextId)
 		}
 	}
 	operation := "insert"
@@ -206,7 +223,11 @@ func (db *DB) MakeInsertSql(table string, data any, useReplace bool) (string, []
 	if ts.VersionField != "" {
 		nextVer = db.NextVersion(table)
 	}
-	return makeInsertSql(db.QuoteTag, table, data, useReplace, ts.VersionField, nextVer)
+	nextId := ""
+	if ts.IdField != "" {
+		nextId = db.NextID(table)
+	}
+	return makeInsertSql(db.QuoteTag, table, data, useReplace, ts.VersionField, nextVer, ts.IdField, nextId)
 }
 
 func (db *DB) MakeUpdateSql(table string, data any, conditions string, args ...any) (string, []any) {
@@ -224,7 +245,11 @@ func (tx *Tx) MakeInsertSql(table string, data any, useReplace bool) (string, []
 	if ts.VersionField != "" {
 		nextVer = tx.db.NextVersion(table)
 	}
-	return makeInsertSql(tx.QuoteTag, table, data, useReplace, ts.VersionField, nextVer)
+	nextId := ""
+	if ts.IdField != "" {
+		nextId = tx.db.NextID(table)
+	}
+	return makeInsertSql(tx.QuoteTag, table, data, useReplace, ts.VersionField, nextVer, ts.IdField, nextId)
 }
 
 func (tx *Tx) MakeUpdateSql(table string, data any, conditions string, args ...any) (string, []any) {

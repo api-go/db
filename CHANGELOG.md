@@ -1,5 +1,10 @@
 # 变更记录 - @go/db
 
+## [1.0.3] - 2026-05-04
+### 新增
+- **自动随机 ID (Auto Random ID)**：当表主键或唯一索引字段类型为 `char(8/10/12/14)` 且值为空时，自动填充分布式唯一 ID。
+- **智能 ID 生成器**：自动适配数据库类型（MySQL 右旋散列、PostgreSQL 时间单调、SQLite 纯随机），优先使用 Redis 分布式生成器。
+
 ## [1.0.2] - 2026-05-04
 ### 修复
 - **PostgreSQL 增强**：补全了 `getTable` 中的元数据探测逻辑，使 `autoVersion` 和影子删除在 PostgreSQL 下可自动启用。
@@ -13,7 +18,7 @@
 ### 新增
 - **架构 DSL (Schema-as-Code)**：支持通过文本 DSL 定义并自动同步数据库结构。
 - **影子删除 (Shadow Deletion)**：支持 `SD` 标记，使用 `db.Remove` 自动将删除数据移动到 `_deleted` 后缀的备份表中。
-- **乐观锁与版本控制**：支持 `ver` 标记，`db.Update` 自动处理版本递增与冲突检测。
+- **乐观锁与版本控制**：支持 `db.Update` 自动处理版本递增与冲突检测。
 - **泛型支持**：新增 `db.ToSlice[T]` 和 `db.To[T]`，提供类型安全的查询结果映射。
 - **PostgreSQL 支持**：初步支持 PostgreSQL 的架构同步逻辑。
 - **AI 友好文档**：新增 `db.SchemaMarkdown()` 自动生成 Markdown 格式的数据库模型文档。

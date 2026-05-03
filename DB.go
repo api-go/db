@@ -39,7 +39,7 @@ type Config struct {
 	MaxIdles      int
 	MaxLifeTime   int
 	LogSlow       config.Duration
-	VersionRedis  string
+	Redis         string
 	logger        *log.Logger
 }
 
@@ -143,7 +143,7 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 	dbInfo.MaxLifeTime = cast.Int(q.Get("maxLifeTime"))
 	dbInfo.MaxOpens = cast.Int(q.Get("maxOpens"))
 	dbInfo.LogSlow = config.Duration(cast.Duration(q.Get("logSlow")))
-	dbInfo.VersionRedis = q.Get("versionRedis")
+	dbInfo.Redis = q.Get("redis")
 	dbInfo.SSL = q.Get("tls")
 
 	sslCa := q.Get("sslCA")
@@ -175,7 +175,7 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 
 	args := make([]string, 0)
 	for k := range q {
-		if k != "maxIdles" && k != "maxLifeTime" && k != "maxOpens" && k != "logSlow" && k != "tls" && k != "versionRedis" {
+		if k != "maxIdles" && k != "maxLifeTime" && k != "maxOpens" && k != "logSlow" && k != "tls" && k != "redis" {
 			args = append(args, k+"="+q.Get(k))
 		}
 	}
@@ -204,6 +204,8 @@ type TableStruct struct {
 	ShadowDelete   bool
 	HasShadowTable bool
 	VersionField   string
+	IdField        string
+	IdSize         int
 }
 
 type TableField struct {
@@ -252,6 +254,7 @@ var dbSSLs = make(map[string]*SSL)
 var dbInstances = make(map[string]*DB)
 var dbInstancesLock = sync.RWMutex{}
 var globalVersionMap = sync.Map{}
+var globalIdMakers = sync.Map{}
 var versionInited = sync.Map{}
 var once sync.Once
 
@@ -266,8 +269,8 @@ func (db *DB) NextVersion(table string) int64 {
 		versionInited.Store(table, true)
 	}
 
-	if db.Config.VersionRedis != "" {
-		r := redis.GetRedis(db.Config.VersionRedis, db.logger.logger)
+	if db.Config.Redis != "" {
+		r := redis.GetRedis(db.Config.Redis, db.logger.logger)
 		if r != nil {
 			return r.INCR("db_ver_" + table)
 		}
@@ -277,12 +280,51 @@ func (db *DB) NextVersion(table string) int64 {
 	return atomic.AddInt64(v.(*int64), 1)
 }
 
+type idMaker interface {
+	Get(size int) string
+	GetForMysql(size int) string
+	GetForPostgreSQL(size int) string
+}
+
+func (db *DB) NextID(table string) string {
+	ts := db.getTable(table)
+	if ts.IdField == "" || ts.IdSize == 0 {
+		return ""
+	}
+
+	var maker idMaker
+	if db.Config.Redis != "" {
+		if v, ok := globalIdMakers.Load(db.Config.Redis); ok {
+			maker = v.(idMaker)
+		} else {
+			r := redis.GetRedis(db.Config.Redis, db.logger.logger)
+			if r != nil {
+				maker = redis.NewIDMaker(r)
+				globalIdMakers.Store(db.Config.Redis, maker)
+			}
+		}
+	}
+
+	if maker == nil {
+		maker = id.DefaultIDMaker
+	}
+
+	switch db.Config.Type {
+	case "mysql":
+		return maker.GetForMysql(ts.IdSize)
+	case "postgres", "pgx":
+		return maker.GetForPostgreSQL(ts.IdSize)
+	default:
+		return maker.Get(ts.IdSize)
+	}
+}
+
 func (db *DB) syncVersionFromDB(table, versionField string) {
 	query := fmt.Sprintf("SELECT MAX(%s) FROM %s", db.Quote(versionField), db.Quote(table))
 	maxVer := db.Query(query).IntOnR1C1()
 
-	if db.Config.VersionRedis != "" {
-		r := redis.GetRedis(db.Config.VersionRedis, db.logger.logger)
+	if db.Config.Redis != "" {
+		r := redis.GetRedis(db.Config.Redis, db.logger.logger)
 		if r != nil {
 			r.Do("SETNX", "db_ver_"+table, maxVer)
 			return
@@ -712,25 +754,42 @@ func (db *DB) getTable(table string) *TableStruct {
 	// Probe columns and autoVersion
 	var query string
 	if db.Config.Type == "mysql" {
-		query = "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?"
+		query = "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?"
 		res := db.Query(query, db.Config.DB, table)
-		cols := res.StringsOnC1()
-		ts.Columns = cols
-		for _, col := range cols {
+		rows := res.MapResults()
+		for _, row := range rows {
+			col := cast.String(row["COLUMN_NAME"])
+			dataType := cast.String(row["DATA_TYPE"])
+			charLen := cast.Int(row["CHARACTER_MAXIMUM_LENGTH"])
+			colKey := cast.String(row["COLUMN_KEY"])
+
+			ts.Columns = append(ts.Columns, col)
 			if col == "autoVersion" {
 				ts.VersionField = "autoVersion"
-				break
+			}
+			if (colKey == "PRI" || colKey == "UNI") && strings.ToLower(dataType) == "char" && (charLen == 8 || charLen == 10 || charLen == 12 || charLen == 14) {
+				ts.IdField = col
+				ts.IdSize = charLen
 			}
 		}
 	} else if db.Config.Type == "postgres" || db.Config.Type == "pgx" {
-		query = "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?"
+		query = "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?"
 		res := db.Query(query, table)
-		cols := res.StringsOnC1()
-		ts.Columns = cols
-		for _, col := range cols {
+		rows := res.MapResults()
+		for _, row := range rows {
+			col := cast.String(row["column_name"])
+			dataType := cast.String(row["data_type"])
+			charLen := cast.Int(row["character_maximum_length"])
+
+			ts.Columns = append(ts.Columns, col)
 			if col == "autoVersion" {
 				ts.VersionField = "autoVersion"
-				break
+			}
+			// PostgreSQL PK/Unique check is complex, we use column name 'id' and char type as a heuristic or check constraints if needed.
+			// To keep it simple and efficient as requested:
+			if (col == "id" || col == "ID") && (strings.Contains(strings.ToLower(dataType), "char")) && (charLen == 8 || charLen == 10 || charLen == 12 || charLen == 14) {
+				ts.IdField = col
+				ts.IdSize = charLen
 			}
 		}
 	} else if isFileDB(db.Config.Type) {
@@ -740,9 +799,25 @@ func (db *DB) getTable(table string) *TableStruct {
 		rows := res.MapResults()
 		for _, row := range rows {
 			colName := cast.String(row["name"])
+			colType := strings.ToUpper(cast.String(row["type"]))
+			isPk := cast.Int(row["pk"]) > 0
+
 			ts.Columns = append(ts.Columns, colName)
 			if colName == "autoVersion" {
 				ts.VersionField = "autoVersion"
+			}
+
+			if isPk && strings.Contains(colType, "CHAR") {
+				// Extract length from CHAR(N)
+				charLen := 0
+				fmt.Sscanf(colType, "CHAR(%d)", &charLen)
+				if charLen == 0 {
+					fmt.Sscanf(colType, "CHARACTER(%d)", &charLen)
+				}
+				if charLen == 8 || charLen == 10 || charLen == 12 || charLen == 14 {
+					ts.IdField = colName
+					ts.IdSize = charLen
+				}
 			}
 		}
 	}

@@ -16,6 +16,7 @@
 | `TestInsertReplaceUpdateDelete` | 通过 | 0.01s | 验证 SQLite 下的 CRUD 基本操作 |
 | `TestTransaction` | 通过 | 0.03s | 验证事务隔离、回滚与提交 |
 | `TestSchemaSync` | 通过 | 0.01s | 验证 DSL 同步、影子删除、版本号乐观锁及泛型 API |
+| `TestAutoRandomID` | 通过 | 0.01s | 验证 char(N) 主键的自动 ID 填充 |
 
 ## 🚀 性能基准 (Benchmarks)
 | 基准测试 | 迭代次数 | 耗时 | 内存分配 | 备注 |
