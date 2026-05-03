@@ -1,23 +1,29 @@
-# Test Results for @go/db
+# @go/db 测试报告
 
-## 📊 Summary
-- **Module**: `apigo.cc/go/db`
-- **Total Tests**: 4
-- **Passed**: 4
-- **Failed**: 0
-- **Build Status**: Success
-- **Date**: 2026-05-03
+## 📊 概览
+- **模块**: `apigo.cc/go/db`
+- **总测试用例**: 5
+- **通过**: 5
+- **失败**: 0
+- **编译状态**: 成功 (Success)
+- **测试日期**: 2026-05-03
 
-## ✅ Details
-| Test Case | Status | Duration | Notes |
+## ✅ 详细详情
+| 测试用例 | 状态 | 耗时 | 备注 |
 | :--- | :--- | :--- | :--- |
-| `TestMakeInsertSql` | PASS | 0.00s | Verified SQL generation logic for Struct models |
-| `TestBaseSelect` | PASS | 0.00s | Verified Result binding (Struct, Map, Base types) |
-| `TestInsertReplaceUpdateDelete` | PASS | 0.01s | Verified CRUD operations with SQLite |
-| `TestTransaction` | PASS | 0.03s | Verified Transaction isolation and Rollback/Commit |
+| `TestMakeInsertSql` | 通过 | 0.00s | 验证 Struct 模型的 SQL 生成逻辑 |
+| `TestBaseSelect` | 通过 | 0.00s | 验证结果绑定 (Struct, Map, 基础类型) |
+| `TestInsertReplaceUpdateDelete` | 通过 | 0.01s | 验证 SQLite 下的 CRUD 基本操作 |
+| `TestTransaction` | 通过 | 0.03s | 验证事务隔离、回滚与提交 |
+| `TestSchemaSync` | 通过 | 0.01s | 验证 DSL 同步、影子删除、版本号乐观锁及泛型 API |
 
-## 🚀 Benchmarks
-| Benchmark | Iterations | Time/op | Conn |
+## 🚀 性能基准 (Benchmarks)
+| 基准测试 | 迭代次数 | 耗时 | 备注 |
 | :--- | :--- | :--- | :--- |
-| `BenchmarkForPool` | - | - | Passed (Manual run verified pool reuse) |
-| `BenchmarkForPoolParallel` | - | - | Passed (Manual run verified high concurrency) |
+| `BenchmarkForPool` | - | - | 已通过 (手动验证连接池复用) |
+| `BenchmarkForPoolParallel` | - | - | 已通过 (手动验证高并发下的稳定性) |
+
+## 🛠 环境
+- **OS**: darwin (macOS)
+- **Go Version**: 1.2x+
+- **Primary Driver**: modernc.org/sqlite

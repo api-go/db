@@ -188,6 +188,13 @@ type DB struct {
 	logger              *dbLogger
 	Error               error
 	QuoteTag            string
+	tables              map[string]*TableStruct
+	tablesLock          *sync.RWMutex
+}
+
+type TableStruct struct {
+	VersionField   string
+	HasShadowTable bool
 }
 
 var confAes, _ = crypto.NewAESCBCAndEraseKey([]byte("?GQ$0K0GgLdO=f+~L68PLm$uhKr4'=tV"), []byte("VFs7@sK61cj^f?HZ"))
@@ -355,6 +362,8 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 	db.QuoteTag = cast.If(conf.Type == "mysql", "`", "\"")
 	db.name = name
 	db.conn = conn
+	db.tables = make(map[string]*TableStruct)
+	db.tablesLock = new(sync.RWMutex)
 
 	if conf.ReadonlyHosts != nil {
 		readonlyConnections := make([]*sql.DB, 0)
@@ -440,6 +449,8 @@ func (db *DB) CopyByLogger(logger *log.Logger) *DB {
 	newDB.conn = db.conn
 	newDB.readonlyConnections = db.readonlyConnections
 	newDB.Config = db.Config
+	newDB.tables = db.tables
+	newDB.tablesLock = db.tablesLock
 	if logger == nil {
 		logger = log.DefaultLogger
 	}
@@ -596,6 +607,64 @@ func (db *DB) Delete(table string, conditions string, args ...any) *ExecResult {
 		}
 	}
 	return r
+}
+
+func (db *DB) getTable(table string) *TableStruct {
+	db.tablesLock.RLock()
+	ts, ok := db.tables[table]
+	db.tablesLock.RUnlock()
+	if ok {
+		return ts
+	}
+
+	db.tablesLock.Lock()
+	defer db.tablesLock.Unlock()
+
+	// Double check
+	if ts, ok = db.tables[table]; ok {
+		return ts
+	}
+
+	ts = &TableStruct{}
+	// Probe autoVersion
+	var query string
+	if db.Config.Type == "mysql" {
+		query = "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = 'autoVersion' AND DATA_TYPE = 'bigint' AND COLUMN_TYPE LIKE '%unsigned%'"
+		res := db.Query(query, db.Config.DB, table)
+		if res.StringOnR1C1() != "" {
+			ts.VersionField = "autoVersion"
+		}
+	} else if isFileDB(db.Config.Type) {
+		// For SQLite
+		query = fmt.Sprintf("PRAGMA table_info(%s)", db.Quote(table))
+		res := db.Query(query)
+		rows := res.MapResults()
+		for _, row := range rows {
+			if cast.String(row["name"]) == "autoVersion" {
+				ts.VersionField = "autoVersion"
+				break
+			}
+		}
+	}
+
+	// Probe shadow table
+	shadowTable := table + "_deleted"
+	if db.Config.Type == "mysql" {
+		query = "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?"
+		res := db.Query(query, db.Config.DB, shadowTable)
+		if res.StringOnR1C1() != "" {
+			ts.HasShadowTable = true
+		}
+	} else if isFileDB(db.Config.Type) {
+		query = "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+		res := db.Query(query, shadowTable)
+		if res.StringOnR1C1() != "" {
+			ts.HasShadowTable = true
+		}
+	}
+
+	db.tables[table] = ts
+	return ts
 }
 
 func (db *DB) InKeys(numArgs int) string {
