@@ -8,7 +8,7 @@ require (
 	apigo.cc/go/convert v1.0.4
 	apigo.cc/go/crypto v1.0.4
 	apigo.cc/go/id v1.0.4
-	apigo.cc/go/log v1.0.0
+	apigo.cc/go/log v1.0.1
 	apigo.cc/go/rand v1.0.4
 	apigo.cc/go/safe v1.0.4
 	apigo.cc/go/shell v1.0.4

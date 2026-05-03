@@ -237,7 +237,7 @@ type dbLogger struct {
 }
 
 func (dl *dbLogger) LogError(errStr string) {
-	dl.logger.DBError(errStr, dl.config.Type, dl.config.Dsn(), "", nil, 0)
+	dl.logger.DB(dl.config.Type, dl.config.Dsn(), "", nil, 0, errStr)
 }
 
 func (dl *dbLogger) LogQuery(query string, args []any, usedTime float32) {
@@ -245,7 +245,7 @@ func (dl *dbLogger) LogQuery(query string, args []any, usedTime float32) {
 }
 
 func (dl *dbLogger) LogQueryError(errStr string, query string, args []any, usedTime float32) {
-	dl.logger.DBError(errStr, dl.config.Type, dl.config.Dsn(), query, args, usedTime)
+	dl.logger.DB(dl.config.Type, dl.config.Dsn(), query, args, usedTime, errStr)
 }
 
 var dbConfigs = make(map[string]*Config)
@@ -467,7 +467,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 
 	conn, err := getPool(conf)
 	if err != nil {
-		logger.DBError(err.Error(), conf.Type, conf.Dsn(), "", nil, 0)
+		logger.DB(conf.Type, conf.Dsn(), "", nil, 0, err.Error())
 		return &DB{conn: nil, QuoteTag: "\"", Error: err}
 	}
 
@@ -483,7 +483,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 		for _, host := range conf.ReadonlyHosts {
 			conn, err := getPoolForHost(conf, host)
 			if err != nil {
-				logger.DBError(err.Error(), conf.Type, conf.Dsn(), "", nil, 0)
+				logger.DB(conf.Type, conf.Dsn(), "", nil, 0, err.Error())
 			} else {
 				readonlyConnections = append(readonlyConnections, conn)
 			}
