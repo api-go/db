@@ -73,6 +73,18 @@ func (r *QueryResult) To(result any) error {
 	return r.makeResults(result, r.rows)
 }
 
+func ToSlice[T any](r *QueryResult) ([]T, error) {
+	var result []T
+	err := r.To(&result)
+	return result, err
+}
+
+func ToValue[T any](r *QueryResult) (T, error) {
+	var result T
+	err := r.To(&result)
+	return result, err
+}
+
 func (r *QueryResult) MapResults() []map[string]any {
 	result := make([]map[string]any, 0)
 	err := r.makeResults(&result, r.rows)
