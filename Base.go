@@ -6,11 +6,51 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"apigo.cc/go/cast"
 	"apigo.cc/go/log"
 )
+
+var structFieldsCache = sync.Map{}
+
+type structFieldInfo struct {
+	name  string
+	index []int
+}
+
+func getStructFields(typ reflect.Type) []structFieldInfo {
+	if v, ok := structFieldsCache.Load(typ); ok {
+		return v.([]structFieldInfo)
+	}
+	var fields []structFieldInfo
+	flattenFields(typ, nil, &fields)
+	structFieldsCache.Store(typ, fields)
+	return fields
+}
+
+func flattenFields(typ reflect.Type, index []int, fields *[]structFieldInfo) {
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	if typ.Kind() != reflect.Struct {
+		return
+	}
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		newIndex := make([]int, len(index)+len(f.Index))
+		copy(newIndex, index)
+		copy(newIndex[len(index):], f.Index)
+		if f.Anonymous && f.Type.Kind() == reflect.Struct {
+			flattenFields(f.Type, newIndex, fields)
+		} else {
+			if f.Name[0] >= 'A' && f.Name[0] <= 'Z' {
+				*fields = append(*fields, structFieldInfo{name: f.Name, index: newIndex})
+			}
+		}
+	}
+}
 
 func basePrepare(db *sql.DB, tx *sql.Tx, query string) *Stmt {
 	var sqlStmt *sql.Stmt
@@ -196,19 +236,6 @@ func (tx *Tx) MakeUpdateSql(table string, data any, conditions string, args ...a
 	return makeUpdateSql(tx.QuoteTag, table, data, conditions, ts.VersionField, nextVer, args...)
 }
 
-func getFlatFields(fields map[string]reflect.Value, fieldKeys *[]string, value reflect.Value) {
-	valueType := value.Type()
-	for i := 0; i < value.NumField(); i++ {
-		v := value.Field(i)
-		if valueType.Field(i).Anonymous {
-			getFlatFields(fields, fieldKeys, v)
-		} else {
-			*fieldKeys = append(*fieldKeys, valueType.Field(i).Name)
-			fields[valueType.Field(i).Name] = v
-		}
-	}
-}
-
 func MakeKeysVarsValues(data any) ([]string, []string, []any) {
 	keys := make([]string, 0)
 	vars := make([]string, 0)
@@ -222,18 +249,13 @@ func MakeKeysVarsValues(data any) ([]string, []string, []any) {
 	}
 
 	if dataType.Kind() == reflect.Struct {
-		fields := make(map[string]reflect.Value)
-		fieldKeys := make([]string, 0)
-		getFlatFields(fields, &fieldKeys, dataValue)
-		for _, k := range fieldKeys {
-			if k[0] >= 'a' && k[0] <= 'z' {
-				continue
-			}
-			v := fields[k]
+		fields := getStructFields(dataType)
+		for _, f := range fields {
+			v := dataValue.FieldByIndex(f.index)
 			if v.Kind() == reflect.Interface {
 				v = v.Elem()
 			}
-			keys = append(keys, k)
+			keys = append(keys, f.name)
 			if v.Kind() == reflect.String && v.Len() > 0 && v.String()[0] == ':' {
 				vars = append(vars, v.String()[1:])
 			} else {

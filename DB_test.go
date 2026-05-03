@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -14,6 +15,12 @@ import (
 	_ "apigo.cc/go/db/mysql"
 	_ "modernc.org/sqlite"
 )
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	os.Remove("test.db")
+	os.Exit(code)
+}
 
 var dbset = "sqlite://test.db"
 
@@ -73,7 +80,7 @@ func initDB(t *testing.T) *db.DB {
 				email VARCHAR(45),
 				parents JSON,
 				active TINYINT NOT NULL DEFAULT 0,
-				time DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f')));`)
+				time DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now', 'localtime')));`)
 	}
 	if er.Error != nil {
 		t.Fatal("Failed to create table", er)

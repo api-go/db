@@ -39,6 +39,7 @@ func (r *ExecResult) Changes() int64 {
 	}
 	numChanges, err := r.result.RowsAffected()
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 		return 0
 	}
@@ -51,6 +52,7 @@ func (r *ExecResult) Id() int64 {
 	}
 	insertId, err := r.result.LastInsertId()
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 		return 0
 	}
@@ -79,7 +81,7 @@ func ToSlice[T any](r *QueryResult) ([]T, error) {
 	return result, err
 }
 
-func ToValue[T any](r *QueryResult) (T, error) {
+func To[T any](r *QueryResult) (T, error) {
 	var result T
 	err := r.To(&result)
 	return result, err
@@ -89,6 +91,7 @@ func (r *QueryResult) MapResults() []map[string]any {
 	result := make([]map[string]any, 0)
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -98,6 +101,7 @@ func (r *QueryResult) SliceResults() [][]any {
 	result := make([][]any, 0)
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -107,6 +111,7 @@ func (r *QueryResult) StringMapResults() []map[string]string {
 	result := make([]map[string]string, 0)
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -116,6 +121,7 @@ func (r *QueryResult) StringSliceResults() [][]string {
 	result := make([][]string, 0)
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -125,6 +131,7 @@ func (r *QueryResult) MapOnR1() map[string]any {
 	result := make(map[string]any)
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -134,6 +141,7 @@ func (r *QueryResult) StringMapOnR1() map[string]string {
 	result := make(map[string]string)
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -143,6 +151,7 @@ func (r *QueryResult) IntsOnC1() []int64 {
 	result := make([]int64, 0)
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -152,6 +161,7 @@ func (r *QueryResult) StringsOnC1() []string {
 	result := make([]string, 0)
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -161,6 +171,7 @@ func (r *QueryResult) IntOnR1C1() int64 {
 	var result int64 = 0
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -170,6 +181,7 @@ func (r *QueryResult) FloatOnR1C1() float64 {
 	var result float64 = 0
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result
@@ -179,6 +191,7 @@ func (r *QueryResult) StringOnR1C1() string {
 	result := ""
 	err := r.makeResults(&result, r.rows)
 	if err != nil {
+		r.Error = err
 		r.logger.LogQueryError(err.Error(), *r.Sql, r.Args, r.usedTime)
 	}
 	return result

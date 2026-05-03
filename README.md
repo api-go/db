@@ -21,30 +21,68 @@ go get apigo.cc/go/db
 ## 🛠 API 指南
 
 ### 1. 核心方法
-- **`GetDB(name string, logger *log.Logger) (*DB, error)`**
-  - 获取数据库连接实例。`name` 对应 `db.json` 中的配置名。
+- **`GetDB(name string, logger *log.Logger) *DB`**
+  - 获取数据库连接实例。`name` 可以是 `db.json` 中的配置名，也可以是标准 DSN（如 `mysql://user:pwd@host:port/db` 或 `sqlite://test.db`）。
 - **`Sync(schema string) error`**
-  - 解析 DSL 并同步数据库表结构。用于创建表（包括 `_deleted` 表）和索引。
+  - 解析 DSL 并同步数据库表结构。用于创建表（包括 `_deleted` 表）和索引。详见 [架构 DSL 指南](./DSL.md)。
 
-### 2. 写操作 (返回 `(*ExecResult, error)`)
-- **`Insert(table string, data any)`**: 插入数据。若表符合 `autoVersion` 约定，会自动注入新的全局版本号。
-- **`Update(table string, data any, conditions string, args ...any)`**: 更新数据。若表符合 `autoVersion` 约定，自动递增版本号并应用乐观锁。
+### 2. 写操作 (返回 `*ExecResult`)
+- **`Insert/Replace(table string, data any)`**: 插入或替换数据。若表包含 `autoVersion` 字段，会自动注入初始版本号。
+- **`Update(table string, data any, conditions string, args ...any)`**: 更新数据。若表包含 `autoVersion` 字段，自动递增版本号并应用乐观锁。
 - **`Delete(table string, conditions string, args ...any)`**: **智能删除**。根据是否存在 `_deleted` 表自动选择物理删除或影子删除。
 
-### 3. 读操作
-- **`Query(query string, args ...any) (*QueryResult, error)`**: 执行查询。
-- **`QueryResult` 结果处理**:
-    - **泛型 API (推荐)**: `db.ToSlice[T](...)`, `db.ToValue[T](...)`
-    - **链式方法**: `To(ptr)`, `MapResults()`, `ToKV(mapPtr)`, `IntOnR1C1()` 等。
+#### 结果判定 (`ExecResult`)
+```go
+res := dbInst.Insert("users", newUser)
+if res.Error != nil { /* 发生 SQL 错误 */ }
+count := res.Changes() // 受影响行数
+id := res.Id()         // 获取自增 ID
+```
+
+### 3. 读操作 (返回 `*QueryResult`)
+- **`Query(query string, args ...any)`**: 执行查询。
+- **结果处理 (QueryResult)**:
+    - **泛型绑定 (推荐)**: `db.To[T](res)`, `db.ToSlice[T](res)`
+    - **KV 映射**: `res.ToKV(&mapObj)` 将前两列自动转为 Map。
+    - **快捷取值**: `IntOnR1C1()`, `StringOnR1C1()`, `MapOnR1()`, `StringsOnC1()` 等。
+    - **错误感知**: 所有结果方法都会同步更新 `res.Error`，可链式调用后统一判断。
+
+## 🔐 安全与加密
+
+我们极致注重数据安全：
+- **密码防御**: 内存中的数据库密码受 `safe.SafeBuf` 保护，防止通过内存 Dump 获取明文。
+- **配置加密**: 建议在 `db.json` 中使用密文存储敏感信息。
+- **TODO: sskey 集成**: 计划引入 `sskey` 工具，实现生产环境密钥的统一托管与自动解密。
+
+## 🏗 架构即代码 (DSL 示例)
+
+我们鼓励通过 DSL 定义表结构，实现“修改代码即修改表”。
+
+```go
+schema := `
+== Default ==
+users SD // 用户表，开启影子删除
+  id AI // 自增 ID
+  name v50 U // 字符串(50)，唯一索引
+  autoVersion ubi // 自动版本号
+  status ti // 状态 (TinyInt)
+`
+dbInst.Sync(schema) // 自动创建 users 和 users_deleted 表及索引
+```
+
 
 ### 4. 事务
 ```go
-tx, err := db.Begin()
-if err != nil { /* ... */ }
-defer tx.CheckFinished()
-// ... 事务操作 ...
-tx.Commit()
+tx := dbInst.Begin()
+if tx.Error != nil { /* 处理错误 */ }
+defer tx.CheckFinished() // 自动处理未提交的 Rollback
+
+tx.Insert("users", newUser)
+if tx.Error == nil {
+    tx.Commit()
+}
 ```
+
 
 ## 📖 详细文档
 - [架构 DSL 与版本同步指南](./DSL.md)

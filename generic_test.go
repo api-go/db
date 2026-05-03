@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"testing"
+
 	"apigo.cc/go/db"
 	_ "modernc.org/sqlite"
 )
@@ -36,7 +37,7 @@ func TestGenericQuery(t *testing.T) {
 
 	t.Run("ToValue", func(t *testing.T) {
 		res := dbInst.Query("SELECT name FROM test_generic WHERE id = ?", 1)
-		name, err := db.ToValue[string](res)
+		name, err := db.To[string](res)
 		if err != nil {
 			t.Fatalf("ToValue failed: %v", err)
 		}

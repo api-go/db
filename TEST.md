@@ -18,10 +18,10 @@
 | `TestSchemaSync` | 通过 | 0.01s | 验证 DSL 同步、影子删除、版本号乐观锁及泛型 API |
 
 ## 🚀 性能基准 (Benchmarks)
-| 基准测试 | 迭代次数 | 耗时 | 备注 |
-| :--- | :--- | :--- | :--- |
-| `BenchmarkForPool` | - | - | 已通过 (手动验证连接池复用) |
-| `BenchmarkForPoolParallel` | - | - | 已通过 (手动验证高并发下的稳定性) |
+| 基准测试 | 迭代次数 | 耗时 | 内存分配 | 备注 |
+| :--- | :--- | :--- | :--- | :--- |
+| `BenchmarkForPool` | 172009 | 7384 ns/op | 1224 B/op (34 allocs) | 验证 SQLite 下的查询绑定性能 |
+| `BenchmarkForPoolParallel` | 160250 | 6852 ns/op | 1296 B/op (35 allocs) | 验证高并发下的查询稳定性 |
 
 ## 🛠 环境
 - **OS**: darwin (macOS)

@@ -252,18 +252,54 @@ var dbSSLs = make(map[string]*SSL)
 var dbInstances = make(map[string]*DB)
 var dbInstancesLock = sync.RWMutex{}
 var globalVersionMap = sync.Map{}
+var versionInited = sync.Map{}
 var once sync.Once
 
-func (db *DB) NextVersion(key string) int64 {
+func (db *DB) NextVersion(table string) int64 {
+	ts := db.getTable(table)
+	if ts.VersionField == "" {
+		return 0
+	}
+
+	if _, inited := versionInited.Load(table); !inited {
+		db.syncVersionFromDB(table, ts.VersionField)
+		versionInited.Store(table, true)
+	}
+
 	if db.Config.VersionRedis != "" {
 		r := redis.GetRedis(db.Config.VersionRedis, db.logger.logger)
 		if r != nil {
-			return r.INCR("db_ver_" + key)
+			return r.INCR("db_ver_" + table)
 		}
 	}
 
-	v, _ := globalVersionMap.LoadOrStore(key, new(int64))
+	v, _ := globalVersionMap.LoadOrStore(table, new(int64))
 	return atomic.AddInt64(v.(*int64), 1)
+}
+
+func (db *DB) syncVersionFromDB(table, versionField string) {
+	query := fmt.Sprintf("SELECT MAX(%s) FROM %s", db.Quote(versionField), db.Quote(table))
+	maxVer := db.Query(query).IntOnR1C1()
+
+	if db.Config.VersionRedis != "" {
+		r := redis.GetRedis(db.Config.VersionRedis, db.logger.logger)
+		if r != nil {
+			r.Do("SETNX", "db_ver_"+table, maxVer)
+			return
+		}
+	}
+
+	v, _ := globalVersionMap.LoadOrStore(table, new(int64))
+	ptr := v.(*int64)
+	for {
+		current := atomic.LoadInt64(ptr)
+		if current >= maxVer {
+			break
+		}
+		if atomic.CompareAndSwapInt64(ptr, current, maxVer) {
+			break
+		}
+	}
 }
 
 func GetDBWithoutCache(name string, logger *log.Logger) *DB {
@@ -686,6 +722,17 @@ func (db *DB) getTable(table string) *TableStruct {
 				break
 			}
 		}
+	} else if db.Config.Type == "postgres" || db.Config.Type == "pgx" {
+		query = "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?"
+		res := db.Query(query, table)
+		cols := res.StringsOnC1()
+		ts.Columns = cols
+		for _, col := range cols {
+			if col == "autoVersion" {
+				ts.VersionField = "autoVersion"
+				break
+			}
+		}
 	} else if isFileDB(db.Config.Type) {
 		// For SQLite
 		query = fmt.Sprintf("PRAGMA table_info(%s)", db.Quote(table))
@@ -705,6 +752,12 @@ func (db *DB) getTable(table string) *TableStruct {
 	if db.Config.Type == "mysql" {
 		query = "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?"
 		res := db.Query(query, db.Config.DB, shadowTable)
+		if res.StringOnR1C1() != "" {
+			ts.HasShadowTable = true
+		}
+	} else if db.Config.Type == "postgres" || db.Config.Type == "pgx" {
+		query = "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?"
+		res := db.Query(query, shadowTable)
 		if res.StringOnR1C1() != "" {
 			ts.HasShadowTable = true
 		}
