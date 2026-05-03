@@ -165,10 +165,23 @@ func (tx *Tx) Update(table string, data any, conditions string, args ...any) *Ex
 }
 
 func (tx *Tx) Delete(table string, conditions string, args ...any) *ExecResult {
+	ts := tx.db.getTable(table)
+	where := ""
 	if conditions != "" {
-		conditions = " where " + conditions
+		where = " where " + conditions
 	}
-	query := fmt.Sprintf("delete from %s%s", tx.Quote(table), conditions)
+
+	if ts.HasShadowTable {
+		// Move to shadow table
+		moveQuery := fmt.Sprintf("insert into %s select * from %s%s", tx.Quote(table+"_deleted"), tx.Quote(table), where)
+		r := baseExec(nil, tx.conn, moveQuery, args...)
+		if r.Error != nil {
+			tx.logger.LogQueryError(r.Error.Error(), moveQuery, args, r.usedTime)
+			return r
+		}
+	}
+
+	query := fmt.Sprintf("delete from %s%s", tx.Quote(table), where)
 	tx.lastSql = &query
 	tx.lastArgs = args
 	r := baseExec(nil, tx.conn, query, args...)

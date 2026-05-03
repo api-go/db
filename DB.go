@@ -610,18 +610,30 @@ func (db *DB) Update(table string, data any, conditions string, args ...any) *Ex
 }
 
 func (db *DB) Delete(table string, conditions string, args ...any) *ExecResult {
-	if conditions != "" {
-		conditions = " where " + conditions
-	}
-	query := fmt.Sprintf("delete from %s%s", db.Quote(table), conditions)
-	r := baseExec(db.conn, nil, query, args...)
-	r.logger = db.logger
-	if r.Error != nil {
-		db.logger.LogQueryError(r.Error.Error(), query, args, r.usedTime)
-	} else {
-		if db.Config.LogSlow > 0 && r.usedTime >= float32(db.Config.LogSlow.TimeDuration()/time.Millisecond) {
-			db.logger.LogQuery(query, args, r.usedTime)
+	ts := db.getTable(table)
+	if !ts.HasShadowTable {
+		if conditions != "" {
+			conditions = " where " + conditions
 		}
+		query := fmt.Sprintf("delete from %s%s", db.Quote(table), conditions)
+		r := baseExec(db.conn, nil, query, args...)
+		r.logger = db.logger
+		if r.Error != nil {
+			db.logger.LogQueryError(r.Error.Error(), query, args, r.usedTime)
+		} else {
+			if db.Config.LogSlow > 0 && r.usedTime >= float32(db.Config.LogSlow.TimeDuration()/time.Millisecond) {
+				db.logger.LogQuery(query, args, r.usedTime)
+			}
+		}
+		return r
+	}
+
+	// Shadow delete
+	tx := db.Begin()
+	defer tx.CheckFinished()
+	r := tx.Delete(table, conditions, args...)
+	if r.Error == nil {
+		tx.Commit()
 	}
 	return r
 }
