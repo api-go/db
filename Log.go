@@ -6,11 +6,11 @@ import (
 )
 
 type DBLog struct {
-	DbType    string
-	Dsn       string
-	Query     string
-	QueryArgs string
-	UsedTime  float32
+	DbType    string  `log:"pos:10,color:blue"`
+	Dsn       string  `log:"pos:11,color:gray,withoutkey:true"`
+	Query     string  `log:"pos:12,color:cyan"`
+	QueryArgs string  `log:"pos:13,color:gray"`
+	UsedTime  float32 `log:"pos:14,format:%.2fms"`
 }
 
 type DBInfoLog struct {
@@ -21,6 +21,11 @@ type DBInfoLog struct {
 type DBErrorLog struct {
 	log.ErrorLog
 	DBLog
+}
+
+func init() {
+	log.RegisterType(log.LogTypeDb, DBInfoLog{})
+	log.RegisterType(log.LogTypeDbError, DBErrorLog{})
 }
 
 func (dl *dbLogger) LogDB(query string, args []any, usedTime float32, err error, extra ...any) {
