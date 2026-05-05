@@ -3,15 +3,15 @@ module apigo.cc/go/db
 go 1.25.0
 
 require (
-	apigo.cc/go/cast v1.2.6
-	apigo.cc/go/config v1.0.5
-	apigo.cc/go/crypto v1.0.4
-	apigo.cc/go/id v1.0.4
-	apigo.cc/go/log v1.1.4
+	apigo.cc/go/cast v1.2.7
+	apigo.cc/go/config v1.0.6
+	apigo.cc/go/crypto v1.0.5
+	apigo.cc/go/id v1.0.5
+	apigo.cc/go/log v1.1.5
 	apigo.cc/go/rand v1.0.5
-	apigo.cc/go/redis v1.0.4
-	apigo.cc/go/safe v1.0.4
-	apigo.cc/go/shell v1.0.4
+	apigo.cc/go/redis v1.0.5
+	apigo.cc/go/safe v1.0.5
+	apigo.cc/go/shell v1.0.5
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/mitchellh/mapstructure v1.5.0
@@ -19,8 +19,8 @@ require (
 )
 
 require (
-	apigo.cc/go/encoding v1.0.4 // indirect
-	apigo.cc/go/file v1.0.5 // indirect
+	apigo.cc/go/encoding v1.0.5 // indirect
+	apigo.cc/go/file v1.0.6 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gomodule/redigo v1.9.3 // indirect
