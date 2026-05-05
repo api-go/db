@@ -7,9 +7,9 @@ require (
 	apigo.cc/go/config v1.0.5
 	apigo.cc/go/crypto v1.0.4
 	apigo.cc/go/id v1.0.4
-	apigo.cc/go/log v1.1.3
-	apigo.cc/go/rand v1.0.4
-	apigo.cc/go/redis v1.0.3
+	apigo.cc/go/log v1.1.4
+	apigo.cc/go/rand v1.0.5
+	apigo.cc/go/redis v1.0.4
 	apigo.cc/go/safe v1.0.4
 	apigo.cc/go/shell v1.0.4
 	github.com/go-sql-driver/mysql v1.10.0
@@ -28,7 +28,6 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -41,3 +40,25 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace apigo.cc/go/cast => ../cast
+
+replace apigo.cc/go/config => ../config
+
+replace apigo.cc/go/crypto => ../crypto
+
+replace apigo.cc/go/id => ../id
+
+replace apigo.cc/go/log => ../log
+
+replace apigo.cc/go/rand => ../rand
+
+replace apigo.cc/go/redis => ../redis
+
+replace apigo.cc/go/safe => ../safe
+
+replace apigo.cc/go/shell => ../shell
+
+replace apigo.cc/go/file => ../file
+
+replace apigo.cc/go/encoding => ../encoding
