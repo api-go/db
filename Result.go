@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"apigo.cc/go/cast"
-	"apigo.cc/go/convert"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -224,7 +223,7 @@ func (r *QueryResult) ToKV(target any) error {
 		}
 		for _, item := range list {
 			newKey := reflect.ValueOf(reflect.New(t.Key()).Interface()).Elem()
-			convert.To(item[colTypes[0].Name()], newKey.Addr().Interface())
+			cast.Convert(newKey.Addr().Interface(), item[colTypes[0].Name()])
 
 			newValue := v.MapIndex(newKey)
 			isNew := false
@@ -439,10 +438,10 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 								if s != "" {
 									_ = json.Unmarshal([]byte(s), storedValue)
 								}
-								convert.To(storedValue, convertedObject.Interface())
+								cast.Convert(convertedObject.Interface(), storedValue)
 								field.Set(convertedObject.Elem())
 							} else {
-								convert.To(val.Interface(), convertedObject.Interface())
+								cast.Convert(convertedObject.Interface(), val.Interface())
 							}
 						}
 					} else if field.Type().AssignableTo(val.Type()) {

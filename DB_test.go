@@ -409,7 +409,7 @@ func TestTransaction(t *testing.T) {
 	}
 
 	n2 := countConnection()
-	fmt.Println("# connection count", n1, n2, cast.MustToJSON(dbInst.GetOriginDB().Stats()), ".")
+	fmt.Println("# connection count", n1, n2, cast.As(cast.ToJSON(dbInst.GetOriginDB().Stats())), ".")
 }
 
 func countConnection() int {
@@ -480,5 +480,5 @@ func BenchmarkForPoolParallel(b *testing.B) {
 	b.Log("OpenConnections", dbInst.GetOriginDB().Stats().OpenConnections)
 
 	n2 := countConnection()
-	fmt.Println("# connection count", n1, n2, cast.MustToJSON(dbInst.GetOriginDB().Stats()), ".")
+	fmt.Println("# connection count", n1, n2, cast.As(cast.ToJSON(dbInst.GetOriginDB().Stats())), ".")
 }

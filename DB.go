@@ -237,15 +237,15 @@ type dbLogger struct {
 }
 
 func (dl *dbLogger) LogError(errStr string) {
-	dl.logger.DB(dl.config.Type, dl.config.Dsn(), "", nil, 0, errStr)
+	dl.LogDB("", nil, 0, errors.New(errStr))
 }
 
 func (dl *dbLogger) LogQuery(query string, args []any, usedTime float32) {
-	dl.logger.DB(dl.config.Type, dl.config.Dsn(), query, args, usedTime)
+	dl.LogDB(query, args, usedTime, nil)
 }
 
 func (dl *dbLogger) LogQueryError(errStr string, query string, args []any, usedTime float32) {
-	dl.logger.DB(dl.config.Type, dl.config.Dsn(), query, args, usedTime, errStr)
+	dl.LogDB(query, args, usedTime, errors.New(errStr))
 }
 
 var dbConfigs = make(map[string]*Config)
@@ -378,7 +378,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 		if n == 0 {
 			once.Do(func() {
 				dbConfigs1 := make(map[string]*Config)
-				if err := config.Load("db", &dbConfigs1); err == nil {
+				if err := config.Load(&dbConfigs1, "db"); err == nil {
 					for k, v := range dbConfigs1 {
 						if v.Host != "" {
 							dbConfigsLock.Lock()
@@ -390,7 +390,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 					logger.Error(err.Error())
 				}
 				dbConfigs2 := make(map[string]string)
-				if err := config.Load("db", &dbConfigs2); err == nil {
+				if err := config.Load(&dbConfigs2, "db"); err == nil {
 					for k, v := range dbConfigs2 {
 						if strings.Contains(v, "://") {
 							v2 := new(Config)
@@ -434,7 +434,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 	}
 
 	if conf.SSL != "" && len(dbSSLs) == 0 {
-		_ = config.Load("dbssl", &dbSSLs)
+		_ = config.Load(&dbSSLs, "dbssl")
 	}
 
 	if conf.SSL != "" && dbSSLs[conf.SSL] == nil {
@@ -467,7 +467,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 
 	conn, err := getPool(conf)
 	if err != nil {
-		logger.DB(conf.Type, conf.Dsn(), "", nil, 0, err.Error())
+		LogDB(logger, conf, "", nil, 0, err)
 		return &DB{conn: nil, QuoteTag: "\"", Error: err}
 	}
 
@@ -483,7 +483,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 		for _, host := range conf.ReadonlyHosts {
 			conn, err := getPoolForHost(conf, host)
 			if err != nil {
-				logger.DB(conf.Type, conf.Dsn(), "", nil, 0, err.Error())
+				LogDB(logger, conf, "", nil, 0, err)
 			} else {
 				readonlyConnections = append(readonlyConnections, conn)
 			}

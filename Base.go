@@ -97,7 +97,7 @@ func flatArgs(args []any) []any {
 		argValue := reflect.ValueOf(arg)
 		kind := argValue.Kind()
 		if kind == reflect.Map || kind == reflect.Struct || (kind == reflect.Slice && argValue.Type().Elem().Kind() != reflect.Uint8) {
-			args[i] = cast.MustToJSON(arg)
+			args[i] = cast.As(cast.ToJSON(arg))
 		}
 	}
 	return args
