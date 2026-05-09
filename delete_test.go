@@ -1,14 +1,34 @@
 package db_test
 
 import (
+	"os"
 	"testing"
 
 	"apigo.cc/go/db"
+	"apigo.cc/go/log"
 	_ "modernc.org/sqlite"
 )
 
 func TestSmartDelete(t *testing.T) {
-	dbInst := db.GetDB("sqlite://:memory:", nil)
+	db.ResetAllForTest()
+
+	dbPath := "./test_smart_delete.db"
+	dbName := "test_delete"
+	os.Remove(dbPath)
+
+	db.SetConfigForTest(dbName, &db.Config{
+		Type: "sqlite",
+		Host: dbPath,
+	})
+
+	dbInst := db.GetDB(dbName, log.DefaultLogger)
+	if dbInst == nil {
+		t.Fatal("dbInst should not be nil")
+	}
+	defer func() {
+		dbInst.Destroy()
+		os.Remove(dbPath)
+	}()
 
 	// Create table and shadow table
 	dbInst.Exec("CREATE TABLE orders (id INTEGER PRIMARY KEY, item TEXT)")

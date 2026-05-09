@@ -6,11 +6,19 @@ import (
 )
 
 type DBLog struct {
-	DbType    string  `log:"pos:10,color:blue"`
-	Dsn       string  `log:"pos:11,color:gray,withoutkey:true"`
-	Query     string  `log:"pos:12,color:cyan"`
-	QueryArgs string  `log:"pos:13,color:gray"`
-	UsedTime  float32 `log:"pos:14,format:%.2fms"`
+	DbType    string  `log:"pos:6,color:blue"`
+	Dsn       string  `log:"pos:7,color:gray,withoutkey:true"`
+	Query     string  `log:"pos:8,color:cyan"`
+	QueryArgs string  `log:"pos:9,color:gray"`
+	UsedTime  float32 `log:"pos:10,format:%.2fms"`
+}
+
+func (l *DBLog) Reset() {
+	l.DbType = ""
+	l.Dsn = ""
+	l.Query = ""
+	l.QueryArgs = ""
+	l.UsedTime = 0
 }
 
 type DBInfoLog struct {
@@ -18,9 +26,19 @@ type DBInfoLog struct {
 	DBLog
 }
 
+func (l *DBInfoLog) Reset() {
+	l.InfoLog.Reset()
+	l.DBLog.Reset()
+}
+
 type DBErrorLog struct {
 	log.ErrorLog
 	DBLog
+}
+
+func (l *DBErrorLog) Reset() {
+	l.ErrorLog.Reset()
+	l.DBLog.Reset()
 }
 
 func init() {

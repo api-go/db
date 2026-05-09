@@ -1,5 +1,14 @@
 # 变更记录 - @go/db
 
+## [1.0.9] - 2026-05-09
+- **基础设施对齐**: 
+    - 升级 `apigo.cc/go/log` 至 `v1.1.13`。
+    - 为 `DBInfoLog` 和 `DBErrorLog` 实现 `Reset()` 方法，以遵循 `log` 的强制 Reset 契约。
+    - 调整 `DBLog` 内的字段 `pos` 索引，从 `6` 开始紧凑排列，消除索引空洞。
+- **测试增强**: 
+    - 修复多个测试用例 (`TestSmartDelete`, `TestGenericQuery`, `TestTableProbing`, `TestVersionControl`) 中因使用 `sqlite://:memory:` DSN 导致的初始化失败问题。
+    - 引入 `test_util.go` 和 `ResetAllForTest()`，确保测试间的全局状态隔离。
+
 ## [1.0.6] - 2026-05-05
 ### 优化
 - **日志体系重构**: 

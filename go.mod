@@ -3,11 +3,11 @@ module apigo.cc/go/db
 go 1.25.0
 
 require (
-	apigo.cc/go/cast v1.2.7
+	apigo.cc/go/cast v1.2.8
 	apigo.cc/go/config v1.0.6
 	apigo.cc/go/crypto v1.0.5
 	apigo.cc/go/id v1.0.5
-	apigo.cc/go/log v1.1.5
+	apigo.cc/go/log v1.1.13
 	apigo.cc/go/rand v1.0.5
 	apigo.cc/go/redis v1.0.5
 	apigo.cc/go/safe v1.0.5
@@ -40,25 +40,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-replace apigo.cc/go/cast => ../cast
-
-replace apigo.cc/go/config => ../config
-
-replace apigo.cc/go/crypto => ../crypto
-
-replace apigo.cc/go/id => ../id
-
-replace apigo.cc/go/log => ../log
-
-replace apigo.cc/go/rand => ../rand
-
-replace apigo.cc/go/redis => ../redis
-
-replace apigo.cc/go/safe => ../safe
-
-replace apigo.cc/go/shell => ../shell
-
-replace apigo.cc/go/file => ../file
-
-replace apigo.cc/go/encoding => ../encoding
