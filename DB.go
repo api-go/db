@@ -159,7 +159,7 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 		}
 	}
 	if sslCa != "" && sslCert != "" && sslKey != "" {
-		sslName := id.MakeID(12)
+		sslName := id.Get12BytesUltraPerSecond()
 		dbInfo.SSL = sslName
 		decryptedCa, _ := confAes.DecryptBytes([]byte(sslCa))
 		decryptedCert, _ := confAes.DecryptBytes([]byte(sslCert))
@@ -280,22 +280,16 @@ func (db *DB) NextVersion(table string) int64 {
 	return atomic.AddInt64(v.(*int64), 1)
 }
 
-type idMaker interface {
-	Get(size int) string
-	GetForMysql(size int) string
-	GetForPostgreSQL(size int) string
-}
-
 func (db *DB) NextID(table string) string {
 	ts := db.getTable(table)
 	if ts.IdField == "" || ts.IdSize == 0 {
 		return ""
 	}
 
-	var maker idMaker
+	var maker *id.IDMaker
 	if db.Config.Redis != "" {
 		if v, ok := globalIdMakers.Load(db.Config.Redis); ok {
-			maker = v.(idMaker)
+			maker = v.(*id.IDMaker)
 		} else {
 			r := redis.GetRedis(db.Config.Redis, db.logger.logger)
 			if r != nil {
