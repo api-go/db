@@ -7,7 +7,7 @@ require (
 	apigo.cc/go/config v1.0.8
 	apigo.cc/go/crypto v1.1.1
 	apigo.cc/go/id v1.0.7
-	apigo.cc/go/log v1.1.10
+	apigo.cc/go/log v1.1.16
 	apigo.cc/go/rand v1.0.6
 	apigo.cc/go/redis v1.0.9
 	apigo.cc/go/safe v1.0.7
@@ -31,10 +31,10 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
