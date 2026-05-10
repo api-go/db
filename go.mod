@@ -9,7 +9,7 @@ require (
 	apigo.cc/go/id v1.0.5
 	apigo.cc/go/log v1.1.13
 	apigo.cc/go/rand v1.0.5
-	apigo.cc/go/redis v1.0.5
+	apigo.cc/go/redis v1.0.8
 	apigo.cc/go/safe v1.0.5
 	apigo.cc/go/shell v1.0.5
 	github.com/go-sql-driver/mysql v1.10.0
