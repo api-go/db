@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"apigo.cc/go/cast"
-	"apigo.cc/go/log"
 )
 
 var structFieldsCache = sync.Map{}
@@ -78,15 +77,19 @@ func baseExec(db *sql.DB, tx *sql.Tx, query string, args ...any) *ExecResult {
 	} else if db != nil {
 		r, err = db.Exec(query, args...)
 	} else {
-		return &ExecResult{Sql: &query, Args: args, usedTime: log.MakeUsedTime(startTime, time.Now()), Error: errors.New("operate on a bad connection")}
+		return &ExecResult{Sql: &query, Args: args, usedTime: makeUsedTime(startTime, time.Now()), Error: errors.New("operate on a bad connection")}
 	}
 	endTime := time.Now()
-	usedTime := log.MakeUsedTime(startTime, endTime)
+	usedTime := makeUsedTime(startTime, endTime)
 
 	if err != nil {
 		return &ExecResult{Sql: &query, Args: args, usedTime: usedTime, Error: err}
 	}
 	return &ExecResult{Sql: &query, Args: args, usedTime: usedTime, result: r}
+}
+
+func makeUsedTime(startTime, endTime time.Time) float32 {
+	return float32(endTime.UnixNano()-startTime.UnixNano()) / 1e6
 }
 
 func flatArgs(args []any) []any {
@@ -114,10 +117,10 @@ func baseQuery(db *sql.DB, tx *sql.Tx, query string, args ...any) *QueryResult {
 	} else if db != nil {
 		rows, err = db.Query(query, args...)
 	} else {
-		return &QueryResult{Sql: &query, Args: args, usedTime: log.MakeUsedTime(startTime, time.Now()), Error: errors.New("operate on a bad connection")}
+		return &QueryResult{Sql: &query, Args: args, usedTime: makeUsedTime(startTime, time.Now()), Error: errors.New("operate on a bad connection")}
 	}
 	endTime := time.Now()
-	usedTime := log.MakeUsedTime(startTime, endTime)
+	usedTime := makeUsedTime(startTime, endTime)
 
 	if err != nil {
 		return &QueryResult{Sql: &query, Args: args, usedTime: usedTime, Error: err}

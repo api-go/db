@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"time"
-
-	"apigo.cc/go/log"
 )
 
 type Stmt struct {
@@ -24,7 +22,7 @@ func (stmt *Stmt) Exec(args ...any) *ExecResult {
 	startTime := time.Now()
 	r, err := stmt.conn.Exec(args...)
 	endTime := time.Now()
-	usedTime := log.MakeUsedTime(startTime, endTime)
+	usedTime := makeUsedTime(startTime, endTime)
 	if err != nil {
 		stmt.logger.LogQueryError(err.Error(), *stmt.lastSql, stmt.lastArgs, usedTime)
 		return &ExecResult{Sql: stmt.lastSql, Args: stmt.lastArgs, usedTime: usedTime, logger: stmt.logger, Error: err}

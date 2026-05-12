@@ -161,9 +161,9 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 	if sslCa != "" && sslCert != "" && sslKey != "" {
 		sslName := id.Get12BytesUltraPerSecond()
 		dbInfo.SSL = sslName
-		decryptedCa, _ := confAes.DecryptBytes([]byte(sslCa))
-		decryptedCert, _ := confAes.DecryptBytes([]byte(sslCert))
-		decryptedKey, _ := confAes.DecryptBytes([]byte(sslKey))
+		decryptedCa, _ := confAES.DecryptBytes([]byte(sslCa))
+		decryptedCert, _ := confAES.DecryptBytes([]byte(sslCert))
+		decryptedKey, _ := confAES.DecryptBytes([]byte(sslKey))
 		tlsConf := BuildTLSConfig(decryptedCa, decryptedCert, decryptedKey, sslSkipVerify)
 		if tlsConf != nil {
 			dbInfo.tls = tlsConf
@@ -221,14 +221,16 @@ type TableField struct {
 	IsVersion  bool
 }
 
-var confAes, _ = crypto.NewAESCBCAndEraseKey([]byte("?GQ$0K0GgLdO=f+~L68PLm$uhKr4'=tV"), []byte("VFs7@sK61cj^f?HZ"))
-var keysSetted = sync.Once{}
+var confAES *crypto.Symmetric
+
+func init() {
+	crypto.OnSetDefaultAES(func(aes *crypto.Symmetric) {
+		confAES = aes
+	})
+}
 
 func SetEncryptKeys(key, iv []byte) {
-	keysSetted.Do(func() {
-		confAes.Close()
-		confAes, _ = crypto.NewAESGCMAndEraseKey(key, iv)
-	})
+	crypto.SetDefaultAES(key, iv)
 }
 
 type dbLogger struct {
@@ -445,7 +447,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 
 	if conf.Password != "" {
 		if encryptedPassword, err := base64.URLEncoding.DecodeString(conf.Password); err == nil {
-			if pwdSafeBuf, err := confAes.Decrypt(encryptedPassword); err == nil {
+			if pwdSafeBuf, err := confAES.Decrypt(encryptedPassword); err == nil {
 				conf.pwd = pwdSafeBuf
 			}
 		}
