@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"apigo.cc/go/db"
+	"apigo.cc/go/file"
 	_ "modernc.org/sqlite"
 )
 
 func TestAutoRandomID(t *testing.T) {
 	dbPath := "id_test.db"
 	dbset := "sqlite://" + dbPath
-	defer os.Remove(dbPath)
+	defer file.Remove(dbPath)
 
 	dbInst := db.GetDB(dbset, nil)
 	// Create table with char(12) primary key

@@ -1,16 +1,16 @@
 package db
 
 import (
-	"os"
 	"testing"
 
+	"apigo.cc/go/file"
 	_ "modernc.org/sqlite"
 )
 
 func TestTableProbing(t *testing.T) {
 	ResetAllForTest()
 	dbPath := "./test_probing.db"
-	os.Remove(dbPath)
+	file.Remove(dbPath)
 	SetConfigForTest("test_probing", &Config{Type: "sqlite", Host: dbPath})
 	dbInst := GetDB("test_probing", nil)
 	if dbInst == nil {
@@ -18,7 +18,7 @@ func TestTableProbing(t *testing.T) {
 	}
 	defer func() {
 		dbInst.Destroy()
-		os.Remove(dbPath)
+		file.Remove(dbPath)
 	}()
 
 

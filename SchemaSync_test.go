@@ -1,17 +1,17 @@
 package db_test
 
 import (
-	"os"
 	"testing"
 
 	"apigo.cc/go/db"
+	"apigo.cc/go/file"
 	_ "modernc.org/sqlite"
 )
 
 func TestSchemaSync(t *testing.T) {
 	dbPath := "test_schema.db"
 	dbInst := db.GetDB("sqlite://"+dbPath, nil)
-	defer os.Remove(dbPath)
+	defer file.Remove(dbPath)
 	defer dbInst.Exec("DROP TABLE IF EXISTS test_table")
 	defer dbInst.Exec("DROP TABLE IF EXISTS test_table_deleted")
 
@@ -40,7 +40,7 @@ test_table SD // Test table with shadow delete
 func TestAutoDetectShadow(t *testing.T) {
 	dbPath := "auto_detect.db"
 	dbInst := db.GetDB("sqlite://"+dbPath, nil)
-	defer os.Remove(dbPath)
+	defer file.Remove(dbPath)
 	defer dbInst.Exec("DROP TABLE IF EXISTS test_auto")
 	defer dbInst.Exec("DROP TABLE IF EXISTS test_auto_deleted")
 

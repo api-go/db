@@ -10,6 +10,7 @@ import (
 
 	"apigo.cc/go/cast"
 	"apigo.cc/go/db"
+	"apigo.cc/go/file"
 	"apigo.cc/go/shell"
 
 	_ "apigo.cc/go/db/mysql"
@@ -18,7 +19,7 @@ import (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
-	os.Remove("test.db")
+	file.Remove("test.db")
 	os.Exit(code)
 }
 

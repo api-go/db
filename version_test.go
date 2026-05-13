@@ -1,11 +1,11 @@
 package db_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
 	"apigo.cc/go/db"
+	"apigo.cc/go/file"
 	"apigo.cc/go/log"
 	_ "modernc.org/sqlite"
 )
@@ -13,7 +13,7 @@ import (
 func TestVersionControl(t *testing.T) {
 	db.ResetAllForTest()
 	dbPath := "./test_version.db"
-	os.Remove(dbPath)
+	file.Remove(dbPath)
 	db.SetConfigForTest("test_version", &db.Config{Type: "sqlite", Host: dbPath})
 	dbInst := db.GetDB("test_version", log.DefaultLogger)
 	if dbInst == nil {
@@ -21,7 +21,7 @@ func TestVersionControl(t *testing.T) {
 	}
 	defer func() {
 		dbInst.Destroy()
-		os.Remove(dbPath)
+		file.Remove(dbPath)
 	}()
 
 

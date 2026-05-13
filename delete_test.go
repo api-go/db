@@ -1,10 +1,10 @@
 package db_test
 
 import (
-	"os"
 	"testing"
 
 	"apigo.cc/go/db"
+	"apigo.cc/go/file"
 	"apigo.cc/go/log"
 	_ "modernc.org/sqlite"
 )
@@ -14,7 +14,7 @@ func TestSmartDelete(t *testing.T) {
 
 	dbPath := "./test_smart_delete.db"
 	dbName := "test_delete"
-	os.Remove(dbPath)
+	file.Remove(dbPath)
 
 	db.SetConfigForTest(dbName, &db.Config{
 		Type: "sqlite",
@@ -27,7 +27,7 @@ func TestSmartDelete(t *testing.T) {
 	}
 	defer func() {
 		dbInst.Destroy()
-		os.Remove(dbPath)
+		file.Remove(dbPath)
 	}()
 
 	// Create table and shadow table

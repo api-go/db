@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -436,7 +435,7 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 							if s, ok := val.Interface().(string); ok {
 								storedValue := new(any)
 								if s != "" {
-									_ = json.Unmarshal([]byte(s), storedValue)
+									cast.UnmarshalJSON([]byte(s), storedValue)
 								}
 								cast.Convert(convertedObject.Interface(), storedValue)
 								field.Set(convertedObject.Elem())
@@ -537,7 +536,7 @@ func fixValue(colName string, colType string, v reflect.Value) reflect.Value {
 		case strings.Contains(colType, "JSON"):
 			if str != "" && (str[0] == '{' || str[0] == '[') {
 				var out any
-				if err := json.Unmarshal([]byte(str), &out); err == nil {
+				if err := cast.UnmarshalJSON([]byte(str), &out); err == nil {
 					return reflect.ValueOf(out)
 				}
 			}

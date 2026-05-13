@@ -1,18 +1,18 @@
 package db_test
 
 import (
-	"os"
 	"strings"
 	"testing"
 
 	"apigo.cc/go/db"
+	"apigo.cc/go/file"
 	_ "modernc.org/sqlite"
 )
 
 func TestAutonomousFTS(t *testing.T) {
 	dbPath := "test_fts.db"
 	dbInst := db.GetDB("sqlite://"+dbPath, nil)
-	defer os.Remove(dbPath)
+	defer file.Remove(dbPath)
 	defer dbInst.Exec("DROP TABLE IF EXISTS fts_test")
 	defer dbInst.Exec("DROP TABLE IF EXISTS fts_test_fts")
 
