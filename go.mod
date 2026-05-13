@@ -7,7 +7,7 @@ require (
 	apigo.cc/go/config v1.3.0
 	apigo.cc/go/crypto v1.3.0
 	apigo.cc/go/id v1.3.0
-	apigo.cc/go/log v1.3.0
+	apigo.cc/go/log v1.3.2
 	apigo.cc/go/rand v1.3.0
 	apigo.cc/go/redis v1.3.0
 	apigo.cc/go/safe v1.3.0

@@ -143,8 +143,35 @@ func quotes(quoteTag string, texts []string) string {
 	return strings.Join(texts, ",")
 }
 
-func makeInsertSql(quoteTag string, table string, data any, useReplace bool, versionField string, nextVer int64, idField string, nextId string) (string, []any) {
+func makeInsertSql(quoteTag string, table string, data any, useReplace bool, versionField string, nextVer int64, idField string, nextId string, ts *TableStruct) (string, []any) {
 	keys, vars, values := MakeKeysVarsValues(data)
+
+	// 全文检索影子列自动分词处理
+	if ts != nil {
+		for _, col := range ts.Columns {
+			if strings.HasSuffix(col, "_tokens") {
+				originCol := strings.TrimSuffix(col, "_tokens")
+				for i, k := range keys {
+					if k == originCol {
+						found := false
+						for _, k2 := range keys {
+							if k2 == col {
+								found = true
+								break
+							}
+						}
+						if !found {
+							keys = append(keys, col)
+							vars = append(vars, "?")
+							values = append(values, BigramTokenize(cast.String(values[i])))
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+
 	if versionField != "" {
 		found := false
 		for _, k := range keys {
@@ -184,9 +211,36 @@ func makeInsertSql(quoteTag string, table string, data any, useReplace bool, ver
 	return query, values
 }
 
-func makeUpdateSql(quoteTag string, table string, data any, conditions string, versionField string, nextVer int64, args ...any) (string, []any) {
+func makeUpdateSql(quoteTag string, table string, data any, conditions string, versionField string, nextVer int64, ts *TableStruct, args ...any) (string, []any) {
 	args = flatArgs(args)
 	keys, vars, values := MakeKeysVarsValues(data)
+
+	// 全文检索影子列自动分词处理
+	if ts != nil {
+		for _, col := range ts.Columns {
+			if strings.HasSuffix(col, "_tokens") {
+				originCol := strings.TrimSuffix(col, "_tokens")
+				for i, k := range keys {
+					if k == originCol {
+						found := false
+						for _, k2 := range keys {
+							if k2 == col {
+								found = true
+								break
+							}
+						}
+						if !found {
+							keys = append(keys, col)
+							vars = append(vars, "?")
+							values = append(values, BigramTokenize(cast.String(values[i])))
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+
 	newKeys := make([]string, 0, len(keys))
 	newValues := make([]any, 0, len(values))
 	var oldVersion any
@@ -230,7 +284,7 @@ func (db *DB) MakeInsertSql(table string, data any, useReplace bool) (string, []
 	if ts.IdField != "" {
 		nextId = db.NextID(table)
 	}
-	return makeInsertSql(db.QuoteTag, table, data, useReplace, ts.VersionField, nextVer, ts.IdField, nextId)
+	return makeInsertSql(db.QuoteTag, table, data, useReplace, ts.VersionField, nextVer, ts.IdField, nextId, ts)
 }
 
 func (db *DB) MakeUpdateSql(table string, data any, conditions string, args ...any) (string, []any) {
@@ -239,7 +293,7 @@ func (db *DB) MakeUpdateSql(table string, data any, conditions string, args ...a
 	if ts.VersionField != "" {
 		nextVer = db.NextVersion(table)
 	}
-	return makeUpdateSql(db.QuoteTag, table, data, conditions, ts.VersionField, nextVer, args...)
+	return makeUpdateSql(db.QuoteTag, table, data, conditions, ts.VersionField, nextVer, ts, args...)
 }
 
 func (tx *Tx) MakeInsertSql(table string, data any, useReplace bool) (string, []any) {
@@ -252,7 +306,7 @@ func (tx *Tx) MakeInsertSql(table string, data any, useReplace bool) (string, []
 	if ts.IdField != "" {
 		nextId = tx.db.NextID(table)
 	}
-	return makeInsertSql(tx.QuoteTag, table, data, useReplace, ts.VersionField, nextVer, ts.IdField, nextId)
+	return makeInsertSql(tx.QuoteTag, table, data, useReplace, ts.VersionField, nextVer, ts.IdField, nextId, ts)
 }
 
 func (tx *Tx) MakeUpdateSql(table string, data any, conditions string, args ...any) (string, []any) {
@@ -261,7 +315,7 @@ func (tx *Tx) MakeUpdateSql(table string, data any, conditions string, args ...a
 	if ts.VersionField != "" {
 		nextVer = tx.db.NextVersion(table)
 	}
-	return makeUpdateSql(tx.QuoteTag, table, data, conditions, ts.VersionField, nextVer, args...)
+	return makeUpdateSql(tx.QuoteTag, table, data, conditions, ts.VersionField, nextVer, ts, args...)
 }
 
 func MakeKeysVarsValues(data any) ([]string, []string, []any) {

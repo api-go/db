@@ -119,6 +119,9 @@ func ParseField(line string) TableField {
 			field.Type = "middleint unsigned"
 		case "t":
 			field.Type = "text"
+		case "o":
+			field.Type = "json"
+			field.IsObject = true
 		case "bb":
 			field.Type = "blob"
 		default:
@@ -199,7 +202,23 @@ func ParseSchema(desc string) []*SchemaGroup {
 			if field.IsVersion {
 				currentTable.VersionField = field.Name
 			}
-			currentTable.Fields = append(currentTable.Fields, field)
+			if field.Index == "fulltext" {
+				// 保持原字段，但移除其索引标记，由影子列承担索引
+				field.Index = ""
+				currentTable.Fields = append(currentTable.Fields, field)
+
+				// 隐式追加影子列
+				tokensField := TableField{
+					Name:    field.Name + "_tokens",
+					Type:    "text",
+					Null:    "NULL",
+					Index:   "fulltext",
+					Comment: "FTS tokens for " + field.Name,
+				}
+				currentTable.Fields = append(currentTable.Fields, tokensField)
+			} else {
+				currentTable.Fields = append(currentTable.Fields, field)
+			}
 		}
 	}
 	return groups
@@ -226,6 +245,9 @@ func (field *TableField) Parse(tableType string) {
 		}
 	} else if tableType == "pg" || tableType == "pgsql" || tableType == "postgres" {
 		typ := field.Type
+		if typ == "json" {
+			typ = "jsonb"
+		}
 		if field.Extra == "AUTO_INCREMENT" {
 			if strings.Contains(typ, "bigint") {
 				typ = "bigserial"
@@ -292,6 +314,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 	keySets := make([]string, 0)
 	keySetBy := make(map[string]string)
 	keySetFields := make(map[string]string)
+	ftsFields := make([]string, 0)
 
 	isPostgres := db.Config.Type == "pg" || db.Config.Type == "pgsql" || db.Config.Type == "postgres"
 
@@ -332,9 +355,19 @@ func (db *DB) CheckTable(table *TableStruct) error {
 				keySetBy[keyName] = keySet
 			}
 		case "fulltext":
-			if !strings.HasPrefix(db.Config.Type, "sqlite") && db.Config.Type != "chai" && !isPostgres {
-				keyName := fmt.Sprint("tk_", table.Name, "_", field.Name)
-				keySet := fmt.Sprintf("FULLTEXT KEY "+db.Quote("%s")+" ("+db.Quote("%s")+") COMMENT '%s'", keyName, field.Name, field.Comment)
+			ftsFields = append(ftsFields, field.Name)
+			keyName := fmt.Sprint("tk_", table.Name, "_", field.Name)
+			keySet := ""
+			if isPostgres {
+				// 使用 simple 分词器，配合应用层的分词结果
+				keySet = fmt.Sprintf("CREATE INDEX \"%s\" ON \"%s\" USING GIN (to_tsvector('simple', \"%s\"))", keyName, table.Name, field.Name)
+			} else if !strings.HasPrefix(db.Config.Type, "sqlite") && db.Config.Type != "chai" {
+				keySet = fmt.Sprintf("FULLTEXT KEY "+db.Quote("%s")+" ("+db.Quote("%s")+") COMMENT '%s'", keyName, field.Name, field.Comment)
+			} else {
+				// SQLite 使用 FTS5，这里不生成普通索引
+				keySet = ""
+			}
+			if keySet != "" {
 				keySets = append(keySets, keySet)
 				keySetBy[keyName] = keySet
 			}
@@ -640,13 +673,49 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			}
 		}
 
-		if res.Error != nil {
+		if res != nil && res.Error != nil {
 			_ = tx.Rollback()
 			return res.Error
 		}
 		_ = tx.Commit()
-	}
+		}
 
+		if len(ftsFields) > 0 && strings.HasPrefix(db.Config.Type, "sqlite") {
+			ftsTableName := table.Name + "_fts"
+			ftsInfo := db.Query("SELECT \"name\" FROM \"sqlite_master\" WHERE \"type\"='table' AND \"name\"='" + ftsTableName + "'").MapOnR1()
+			if ftsInfo["name"] == nil {
+				// 创建 FTS 虚拟表
+				db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE \"%s\" USING fts5(%s, tokenize='unicode61')", ftsTableName, strings.Join(ftsFields, ", ")))
+
+				idField := "id"
+				if len(pks) > 0 {
+					idField = pks[0]
+				}
+
+				// AI Trigger
+				newFtsFields := make([]string, 0, len(ftsFields))
+				for _, f := range ftsFields {
+					newFtsFields = append(newFtsFields, "new."+f)
+				}
+				aiSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ai\" AFTER INSERT ON \"%s\" BEGIN INSERT INTO \"%s\"(rowid, %s) VALUES (new.%s, %s); END;",
+					ftsTableName, table.Name, ftsTableName, strings.Join(ftsFields, ", "), idField, strings.Join(newFtsFields, ", "))
+				db.Exec(aiSql)
+
+				// AD Trigger
+				adSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ad\" AFTER DELETE ON \"%s\" BEGIN DELETE FROM \"%s\" WHERE rowid = old.%s; END;",
+					ftsTableName, table.Name, ftsTableName, idField)
+				db.Exec(adSql)
+
+				// AU Trigger
+				updateSets := make([]string, 0, len(ftsFields))
+				for _, f := range ftsFields {
+					updateSets = append(updateSets, fmt.Sprintf("%s = new.%s", f, f))
+				}
+				auSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_au\" AFTER UPDATE ON \"%s\" BEGIN UPDATE \"%s\" SET %s WHERE rowid = old.%s; END;",
+					ftsTableName, table.Name, ftsTableName, strings.Join(updateSets, ", "), idField)
+				db.Exec(auSql)
+			}
+		}
 SYNC_SHADOW:
 	if table.ShadowDelete && !strings.HasSuffix(table.Name, "_deleted") {
 		table.HasShadowTable = true

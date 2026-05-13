@@ -88,6 +88,7 @@ func (tx *Tx) Prepare(query string) *Stmt {
 }
 
 func (tx *Tx) Exec(query string, args ...any) *ExecResult {
+	query, args = tx.db.rewriteFTS(query, args)
 	tx.lastSql = &query
 	tx.lastArgs = args
 	r := baseExec(nil, tx.conn, query, args...)
@@ -103,6 +104,7 @@ func (tx *Tx) Exec(query string, args ...any) *ExecResult {
 }
 
 func (tx *Tx) Query(query string, args ...any) *QueryResult {
+	query, args = tx.db.rewriteFTS(query, args)
 	tx.lastSql = &query
 	tx.lastArgs = args
 	r := baseQuery(nil, tx.conn, query, args...)

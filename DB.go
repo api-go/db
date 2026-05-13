@@ -219,6 +219,7 @@ type TableField struct {
 	Extra      string
 	Desc       string
 	IsVersion  bool
+	IsObject   bool
 }
 
 var confAES *crypto.Symmetric
@@ -623,6 +624,7 @@ func (db *DB) Begin() *Tx {
 }
 
 func (db *DB) Exec(query string, args ...any) *ExecResult {
+	query, args = db.rewriteFTS(query, args)
 	r := baseExec(db.conn, nil, query, args...)
 	r.logger = db.logger
 	if r.Error != nil {
@@ -636,6 +638,7 @@ func (db *DB) Exec(query string, args ...any) *ExecResult {
 }
 
 func (db *DB) Query(query string, args ...any) *QueryResult {
+	query, args = db.rewriteFTS(query, args)
 	conn := db.conn
 	if db.readonlyConnections != nil {
 		connNum := len(db.readonlyConnections)
@@ -657,6 +660,196 @@ func (db *DB) Query(query string, args ...any) *QueryResult {
 		}
 	}
 	return r
+}
+
+var identifierRegex = `(?:['"` + "`" + `][^'"` + "`" + `]+['"` + "`" + `]|[\w\-]+)`
+var likeFieldReg = regexp.MustCompile(`(?i)(` + identifierRegex + `(?:\.` + identifierRegex + `)*)\s+LIKE\s*$`)
+var likeLiteralReg = regexp.MustCompile(`(?i)(` + identifierRegex + `(?:\.` + identifierRegex + `)*)\s+LIKE\s+(['"])(%?[^'"]*?%?)(['"])`)
+
+func cleanIdentifier(s string) string {
+	parts := strings.Split(s, ".")
+	for i, p := range parts {
+		p = strings.TrimSpace(p)
+		if len(p) >= 2 {
+			if (p[0] == '`' && p[len(p)-1] == '`') ||
+				(p[0] == '"' && p[len(p)-1] == '"') ||
+				(p[0] == '\'' && p[len(p)-1] == '\'') ||
+				(p[0] == '[' && p[len(p)-1] == ']') {
+				parts[i] = p[1 : len(p)-1]
+				continue
+			}
+		}
+		parts[i] = p
+	}
+	return strings.Join(parts, ".")
+}
+
+func (db *DB) rewriteFTS(query string, args []any) (string, []any) {
+	// 1. 处理硬编码的 LIKE 'literal'
+	query = likeLiteralReg.ReplaceAllStringFunc(query, func(m string) string {
+		matches := likeLiteralReg.FindStringSubmatch(m)
+		if matches[2] != matches[4] {
+			return m // 引号不匹配，跳过
+		}
+		field := matches[1]
+		quoteMark := matches[2]
+		literal := matches[3]
+
+		cleanField := cleanIdentifier(field)
+		tableName := db.extractTableName(query, field)
+		if tableName != "" {
+			ts := db.getTable(tableName)
+			colParts := strings.Split(cleanField, ".")
+			colName := colParts[len(colParts)-1]
+			tokensCol := colName + "_tokens"
+
+			hasTokens := false
+			for _, c := range ts.Columns {
+				if c == tokensCol {
+					hasTokens = true
+					break
+				}
+			}
+
+			if hasTokens {
+				searchTerm := strings.Trim(literal, "% ")
+				tokens := BigramTokenize(searchTerm)
+				if db.Config.Type == "pg" || db.Config.Type == "pgsql" || db.Config.Type == "postgres" {
+					tokens = strings.ReplaceAll(tokens, " ", " & ")
+				}
+				pre, suf := db.getFTSMatchSQLParts(query, field)
+				return pre + quoteMark + tokens + quoteMark + suf
+			}
+		}
+		return m
+	})
+
+	if len(args) == 0 || !strings.Contains(strings.ToUpper(query), " LIKE ") {
+		return query, args
+	}
+
+	parts := strings.Split(query, "?")
+	if len(parts)-1 != len(args) {
+		// 存在误伤风险，安全降级
+		return query, args
+	}
+
+	newArgs := make([]any, len(args))
+	copy(newArgs, args)
+
+	isModified := false
+	for i := 0; i < len(args); i++ {
+		match := likeFieldReg.FindStringSubmatch(parts[i])
+		if len(match) > 1 {
+			field := match[1]
+			cleanField := cleanIdentifier(field)
+			tableName := db.extractTableName(query, field)
+			if tableName != "" {
+				ts := db.getTable(tableName)
+				colParts := strings.Split(cleanField, ".")
+				colName := colParts[len(colParts)-1]
+				tokensCol := colName + "_tokens"
+
+				hasTokens := false
+				for _, c := range ts.Columns {
+					if c == tokensCol {
+						hasTokens = true
+						break
+					}
+				}
+
+				if hasTokens {
+					// 命中影子列，执行替换
+					ftsPre, ftsSuf := db.getFTSMatchSQLParts(query, field)
+					parts[i] = strings.Replace(parts[i], match[0], ftsPre, 1)
+					parts[i+1] = ftsSuf + parts[i+1]
+
+					// 处理参数
+					searchTerm := cast.String(args[i])
+					searchTerm = strings.Trim(searchTerm, "% ")
+					tokens := BigramTokenize(searchTerm)
+
+					if db.Config.Type == "pg" || db.Config.Type == "pgsql" || db.Config.Type == "postgres" {
+						tokens = strings.ReplaceAll(tokens, " ", " & ")
+					}
+					newArgs[i] = tokens
+					isModified = true
+				}
+			}
+		}
+	}
+
+	if isModified {
+		return strings.Join(parts, "?"), newArgs
+	}
+
+	return query, args
+}
+
+func (db *DB) getFTSMatchSQLParts(query string, field string) (string, string) {
+	cleanField := cleanIdentifier(field)
+	parts := strings.Split(cleanField, ".")
+	colName := parts[len(parts)-1]
+
+	// 保持原字段引用方式（带引号或别名）
+	tokensField := field + "_tokens"
+	lastPart := field
+	prefix := ""
+	if idx := strings.LastIndex(field, "."); idx != -1 {
+		prefix = field[:idx+1]
+		lastPart = field[idx+1:]
+	}
+
+	if len(lastPart) >= 2 && ((lastPart[0] == '`' && lastPart[len(lastPart)-1] == '`') ||
+		(lastPart[0] == '"' && lastPart[len(lastPart)-1] == '"') ||
+		(lastPart[0] == '[' && lastPart[len(lastPart)-1] == ']')) {
+		tokensField = prefix + lastPart[:len(lastPart)-1] + "_tokens" + lastPart[len(lastPart)-1:]
+	}
+
+	switch db.Config.Type {
+	case "mysql":
+		return fmt.Sprintf("MATCH(%s) AGAINST(", tokensField), " IN BOOLEAN MODE)"
+	case "pg", "pgsql", "postgres":
+		return fmt.Sprintf("%s @@ to_tsquery('simple', ", tokensField), ")"
+	case "sqlite", "sqlite3":
+		tableName := db.extractTableName(query, field)
+		idField := "id"
+		ts := db.getTable(tableName)
+		if ts.IdField != "" {
+			idField = ts.IdField
+		}
+		prefix := ""
+		dotParts := strings.Split(field, ".")
+		if len(dotParts) > 1 {
+			prefix = dotParts[0] + "."
+		}
+		return fmt.Sprintf("%s%s IN (SELECT rowid FROM \"%s_fts\" WHERE \"%s_tokens\" MATCH ", prefix, idField, tableName, colName), ")"
+	default:
+		return fmt.Sprintf("%s LIKE ", field), ""
+	}
+}
+
+func (db *DB) extractTableName(query string, field string) string {
+	cleanField := cleanIdentifier(field)
+	parts := strings.Split(cleanField, ".")
+	if len(parts) > 1 {
+		alias := parts[0]
+		reg := regexp.MustCompile(fmt.Sprintf(`(?i)FROM\s+(%s)\s+(?:AS\s+)?["\` + "`" + `]?%s["\` + "`" + `]?|JOIN\s+(%s)\s+(?:AS\s+)?["\` + "`" + `]?%s["\` + "`" + `]?`, identifierRegex, alias, identifierRegex, alias))
+		match := reg.FindStringSubmatch(query)
+		if len(match) > 1 {
+			if match[1] != "" {
+				return cleanIdentifier(match[1])
+			}
+			return cleanIdentifier(match[2])
+		}
+		return alias
+	}
+	reg := regexp.MustCompile(`(?i)FROM\s+(` + identifierRegex + `)`)
+	match := reg.FindStringSubmatch(query)
+	if len(match) > 1 {
+		return cleanIdentifier(match[1])
+	}
+	return ""
 }
 
 func (db *DB) Insert(table string, data any) *ExecResult {
@@ -763,7 +956,7 @@ func (db *DB) getTable(table string) *TableStruct {
 			if col == "autoVersion" {
 				ts.VersionField = "autoVersion"
 			}
-			if (colKey == "PRI" || colKey == "UNI") && strings.ToLower(dataType) == "char" && (charLen == 8 || charLen == 10 || charLen == 12 || charLen == 14) {
+			if (colKey == "PRI" || colKey == "UNI") && strings.ToLower(dataType) == "char" && (charLen >= 8 && charLen <= 16) {
 				ts.IdField = col
 				ts.IdSize = charLen
 			}
@@ -783,7 +976,7 @@ func (db *DB) getTable(table string) *TableStruct {
 			}
 			// PostgreSQL PK/Unique check is complex, we use column name 'id' and char type as a heuristic or check constraints if needed.
 			// To keep it simple and efficient as requested:
-			if (col == "id" || col == "ID") && (strings.Contains(strings.ToLower(dataType), "char")) && (charLen == 8 || charLen == 10 || charLen == 12 || charLen == 14) {
+			if (col == "id" || col == "ID") && (strings.Contains(strings.ToLower(dataType), "char")) && (charLen >= 8 && charLen <= 16) {
 				ts.IdField = col
 				ts.IdSize = charLen
 			}
@@ -810,7 +1003,7 @@ func (db *DB) getTable(table string) *TableStruct {
 				if charLen == 0 {
 					fmt.Sscanf(colType, "CHARACTER(%d)", &charLen)
 				}
-				if charLen == 8 || charLen == 10 || charLen == 12 || charLen == 14 {
+				if charLen >= 8 && charLen <= 16 {
 					ts.IdField = colName
 					ts.IdSize = charLen
 				}

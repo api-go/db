@@ -415,7 +415,7 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 								if field.Type().AssignableTo(val.Type()) {
 									field.Set(val.Addr())
 								} else if val.Type().String() == "string" {
-									strVal := fixValue(col.DatabaseTypeName(), val)
+									strVal := fixValue(col.Name(), col.DatabaseTypeName(), val)
 									field.Set(reflect.New(field.Type().Elem()))
 									field.Elem().SetString(cast.String(strVal.Interface()))
 								} else if strings.Contains(field.Type().String(), "uint") {
@@ -446,12 +446,12 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 						}
 					} else if field.Type().AssignableTo(val.Type()) {
 						if val.Kind() == reflect.String {
-							field.Set(fixValue(col.DatabaseTypeName(), val))
+							field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val))
 						} else {
 							field.Set(val)
 						}
 					} else if val.Type().String() == "string" {
-						field.Set(fixValue(col.DatabaseTypeName(), val))
+						field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val))
 					} else if strings.Contains(val.Type().String(), "int") {
 						field.SetInt(val.Int())
 					} else if strings.Contains(val.Type().String(), "float") {
@@ -471,9 +471,9 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 			for colIndex, col := range colTypes {
 				valuePtr := reflect.ValueOf(scanValues[colIndex]).Elem()
 				if !valuePtr.IsNil() {
-					data.SetMapIndex(reflect.ValueOf(col.Name()), fixValue(col.DatabaseTypeName(), valuePtr.Elem()))
+					data.SetMapIndex(reflect.ValueOf(col.Name()), fixValue(col.Name(), col.DatabaseTypeName(), valuePtr.Elem()))
 				} else {
-					data.SetMapIndex(reflect.ValueOf(col.Name()), fixValue(col.DatabaseTypeName(), reflect.New(rowType.Elem()).Elem()))
+					data.SetMapIndex(reflect.ValueOf(col.Name()), fixValue(col.Name(), col.DatabaseTypeName(), reflect.New(rowType.Elem()).Elem()))
 				}
 			}
 		} else if rowType.Kind() == reflect.Slice {
@@ -481,15 +481,15 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 			for colIndex, col := range colTypes {
 				valuePtr := reflect.ValueOf(scanValues[colIndex]).Elem()
 				if !valuePtr.IsNil() {
-					data.Index(colIndex).Set(fixValue(col.DatabaseTypeName(), valuePtr.Elem()))
+					data.Index(colIndex).Set(fixValue(col.Name(), col.DatabaseTypeName(), valuePtr.Elem()))
 				} else {
-					data.Index(colIndex).Set(fixValue(col.DatabaseTypeName(), reflect.New(rowType.Elem()).Elem()))
+					data.Index(colIndex).Set(fixValue(col.Name(), col.DatabaseTypeName(), reflect.New(rowType.Elem()).Elem()))
 				}
 			}
 		} else {
 			valuePtr := reflect.ValueOf(scanValues[0]).Elem()
 			if !valuePtr.IsNil() {
-				data = fixValue(colTypes[0].DatabaseTypeName(), valuePtr.Elem())
+				data = fixValue(colTypes[0].Name(), colTypes[0].DatabaseTypeName(), valuePtr.Elem())
 			}
 		}
 
@@ -511,15 +511,15 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 	return nil
 }
 
-func fixValue(colType string, v reflect.Value) reflect.Value {
+func fixValue(colName string, colType string, v reflect.Value) reflect.Value {
 	if v.Kind() == reflect.String {
 		str := v.String()
-		switch colType {
-		case "DATE":
+		switch {
+		case strings.Contains(colType, "DATE"):
 			if len(str) >= 10 && str[4] == '-' && str[7] == '-' {
 				return reflect.ValueOf(str[:10])
 			}
-		case "DATETIME":
+		case strings.Contains(colType, "DATETIME"):
 			if len(str) >= 19 && str[10] == 'T' && str[4] == '-' && str[7] == '-' && str[13] == ':' && str[16] == ':' {
 				str = strings.TrimRight(str, "Z")
 				if len(str) > 19 && str[19] == '.' {
@@ -527,12 +527,19 @@ func fixValue(colType string, v reflect.Value) reflect.Value {
 				}
 				return reflect.ValueOf(str[:10] + " " + str[11:19])
 			}
-		case "TIME":
+		case strings.Contains(colType, "TIME"):
 			if len(str) >= 8 && str[2] == ':' && str[4] == ':' {
 				if len(str) >= 15 && str[8] == '.' {
 					return reflect.ValueOf(str[0:15])
 				}
 				return reflect.ValueOf(str[0:8])
+			}
+		case strings.Contains(colType, "JSON"):
+			if str != "" && (str[0] == '{' || str[0] == '[') {
+				var out any
+				if err := json.Unmarshal([]byte(str), &out); err == nil {
+					return reflect.ValueOf(out)
+				}
 			}
 		}
 	}
