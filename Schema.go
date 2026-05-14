@@ -424,34 +424,40 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			tmpFields := []struct {
 				Name       string
 				Type       string
-				Notnull    bool
+				Notnull    int
 				Dflt_value any
-				Pk         bool
+				Pk         int
 			}{}
-			db.Query("PRAGMA table_info(" + db.Quote(table.Name) + ")").To(&tmpFields)
+			if err := db.Query("PRAGMA table_info(" + db.Quote(table.Name) + ")").To(&tmpFields); err != nil {
+				return err
+			}
 			for _, f := range tmpFields {
 				oldFieldList = append(oldFieldList, &tableFieldDesc{
 					Field:   f.Name,
 					Type:    f.Type,
-					Null:    cast.If(f.Notnull, "NO", "YES"),
-					Key:     cast.If(f.Pk, "PRI", ""),
+					Null:    cast.If(f.Notnull != 0, "NO", "YES"),
+					Key:     cast.If(f.Pk != 0, "PRI", ""),
 					Default: cast.String(f.Dflt_value),
 				})
 			}
 			tmpIndexes := []struct {
 				Name    string
-				Unique  bool
+				Unique  int
 				Origin  string
 				Partial int
 			}{}
-			db.Query("PRAGMA index_list(" + db.Quote(table.Name) + ")").To(&tmpIndexes)
+			if err := db.Query("PRAGMA index_list(" + db.Quote(table.Name) + ")").To(&tmpIndexes); err != nil {
+				return err
+			}
 			for _, i := range tmpIndexes {
 				tmpIndexInfo := []struct {
 					Name  string
 					Seqno int
 					Cid   int
 				}{}
-				db.Query("PRAGMA index_info(" + db.Quote(i.Name) + ")").To(&tmpIndexInfo)
+				if err := db.Query("PRAGMA index_info(" + db.Quote(i.Name) + ")").To(&tmpIndexInfo); err != nil {
+					return err
+				}
 				if len(tmpIndexInfo) > 0 {
 					oldIndexInfos = append(oldIndexInfos, &tableKeyDesc{
 						Key_name:    i.Name,
@@ -515,6 +521,9 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		for keyId := range oldIndexes {
 			if keyId != "PRIMARY" && !isPostgres && strings.ToLower(keySetFields[keyId]) != strings.ToLower(oldIndexes[keyId]) {
 				if strings.HasPrefix(db.Config.Type, "sqlite") {
+					if strings.HasPrefix(keyId, "sqlite_autoindex_") {
+						continue
+					}
 					actions = append(actions, "DROP INDEX "+db.Quote(keyId))
 				} else {
 					actions = append(actions, "DROP KEY "+db.Quote(keyId))
