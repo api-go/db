@@ -3,9 +3,10 @@ module apigo.cc/go/db
 go 1.25.0
 
 require (
-	apigo.cc/go/cast v1.3.0
+	apigo.cc/go/cast v1.3.2
 	apigo.cc/go/config v1.3.0
 	apigo.cc/go/crypto v1.3.0
+	apigo.cc/go/file v1.3.1
 	apigo.cc/go/id v1.3.0
 	apigo.cc/go/log v1.3.2
 	apigo.cc/go/rand v1.3.0
@@ -20,7 +21,6 @@ require (
 
 require (
 	apigo.cc/go/encoding v1.3.0 // indirect
-	apigo.cc/go/file v1.3.0 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect

@@ -349,6 +349,69 @@ func GetDB(name string, logger *log.Logger) *DB {
 	return getDB(name, logger, true)
 }
 
+// Sync 同步数据库结构 (使用默认实例 "default")
+func Sync(desc string) error {
+	d := GetDB("default", nil)
+	if d == nil {
+		return errors.New("default db not configured")
+	}
+	return d.Sync(desc)
+}
+
+// Insert 插入数据 (使用默认实例 "default")
+func Insert(table string, data any) *ExecResult {
+	d := GetDB("default", nil)
+	if d == nil {
+		return &ExecResult{Error: errors.New("default db not configured")}
+	}
+	return d.Insert(table, data)
+}
+
+// Update 更新数据 (使用默认实例 "default")
+func Update(table string, data any, conditions string, args ...any) *ExecResult {
+	d := GetDB("default", nil)
+	if d == nil {
+		return &ExecResult{Error: errors.New("default db not configured")}
+	}
+	return d.Update(table, data, conditions, args...)
+}
+
+// Delete 删除数据 (使用默认实例 "default")
+func Delete(table string, conditions string, args ...any) *ExecResult {
+	d := GetDB("default", nil)
+	if d == nil {
+		return &ExecResult{Error: errors.New("default db not configured")}
+	}
+	return d.Delete(table, conditions, args...)
+}
+
+// Query 查询数据 (使用默认实例 "default")
+func Query(query string, args ...any) *QueryResult {
+	d := GetDB("default", nil)
+	if d == nil {
+		return &QueryResult{Error: errors.New("default db not configured")}
+	}
+	return d.Query(query, args...)
+}
+
+// Exec 执行 SQL (使用默认实例 "default")
+func Exec(query string, args ...any) *ExecResult {
+	d := GetDB("default", nil)
+	if d == nil {
+		return &ExecResult{Error: errors.New("default db not configured")}
+	}
+	return d.Exec(query, args...)
+}
+
+// Begin 开始事务 (使用默认实例 "default")
+func Begin() *Tx {
+	d := GetDB("default", nil)
+	if d == nil {
+		return &Tx{Error: errors.New("default db not configured")}
+	}
+	return d.Begin()
+}
+
 func getDB(name string, logger *log.Logger, useCache bool) *DB {
 	if logger == nil {
 		logger = log.DefaultLogger
