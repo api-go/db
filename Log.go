@@ -6,11 +6,11 @@ import (
 )
 
 type DBLog struct {
-	DbType    string  `log:"pos:6,color:blue"`
-	Dsn       string  `log:"pos:7,color:gray,withoutkey:true"`
-	Query     string  `log:"pos:8,color:cyan"`
-	QueryArgs string  `log:"pos:9,color:gray"`
-	UsedTime  float32 `log:"pos:10,format:%.2fms"`
+	DbType    string  `log:"pos:7,color:blue"`
+	Dsn       string  `log:"pos:8,color:gray,withoutkey:true"`
+	Query     string  `log:"pos:9,color:cyan"`
+	QueryArgs string  `log:"pos:10,color:gray"`
+	UsedTime  float32 `log:"pos:11,format:%.2fms"`
 }
 
 func (l *DBLog) Reset() {
