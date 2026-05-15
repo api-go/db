@@ -294,7 +294,7 @@ func (db *DB) Sync(desc string) error {
 	for _, group := range groups {
 		for _, table := range group.Tables {
 			db.tablesLock.Lock()
-			db.tables[table.Name] = table
+			delete(db.tables, table.Name)
 			db.tablesLock.Unlock()
 
 			err := db.CheckTable(table)

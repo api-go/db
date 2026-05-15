@@ -1046,14 +1046,14 @@ func (db *DB) getTable(table string) *TableStruct {
 		}
 	} else if isFileDB(db.Config.Type) {
 		// For SQLite
-		query = fmt.Sprintf("PRAGMA table_info(%s)", db.Quote(table))
+		query := fmt.Sprintf("PRAGMA table_info(%s)", db.Quote(table))
 		res := db.Query(query)
 		rows := res.MapResults()
 		for _, row := range rows {
 			colName := cast.String(row["name"])
 			colType := strings.ToUpper(cast.String(row["type"]))
 			isPk := cast.Int(row["pk"]) > 0
-
+			
 			ts.Columns = append(ts.Columns, colName)
 			if colName == "autoVersion" {
 				ts.VersionField = "autoVersion"
