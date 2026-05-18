@@ -3,11 +3,13 @@ package db
 import (
 	"database/sql"
 	"errors"
+	"sync"
 	"time"
 )
 
 type Stmt struct {
 	conn     *sql.Stmt
+	sqliteMu *sync.Mutex
 	lastSql  *string
 	lastArgs []any
 	Error    error
@@ -15,6 +17,10 @@ type Stmt struct {
 }
 
 func (stmt *Stmt) Exec(args ...any) *ExecResult {
+	if stmt.sqliteMu != nil {
+		stmt.sqliteMu.Lock()
+		defer stmt.sqliteMu.Unlock()
+	}
 	stmt.lastArgs = args
 	if stmt.conn == nil {
 		return &ExecResult{Sql: stmt.lastSql, Args: stmt.lastArgs, usedTime: -1, logger: stmt.logger, Error: errors.New("operate on a bad connection")}

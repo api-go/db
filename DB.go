@@ -19,7 +19,6 @@ import (
 	"apigo.cc/go/crypto"
 	"apigo.cc/go/id"
 	"apigo.cc/go/log"
-	"apigo.cc/go/rand"
 	"apigo.cc/go/redis"
 	"apigo.cc/go/safe"
 )
@@ -194,6 +193,7 @@ type DB struct {
 	QuoteTag            string
 	tables              map[string]*TableStruct
 	tablesLock          *sync.RWMutex
+	sqliteMu            *sync.Mutex // Serial lock for SQLite writers
 }
 
 type TableStruct struct {
@@ -318,7 +318,7 @@ func (db *DB) NextID(table string) string {
 
 func (db *DB) syncVersionFromDB(table, versionField string) {
 	query := fmt.Sprintf("SELECT MAX(%s) FROM %s", db.Quote(versionField), db.Quote(table))
-	maxVer := db.Query(query).IntOnR1C1()
+	maxVer := db.rawQuery(query).IntOnR1C1()
 
 	if db.Config.Redis != "" {
 		r := redis.GetRedis(db.Config.Redis, db.logger.logger)
@@ -537,6 +537,9 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 	db.conn = conn
 	db.tables = make(map[string]*TableStruct)
 	db.tablesLock = new(sync.RWMutex)
+	if conf.Type == "sqlite" || conf.Type == "sqlite3" {
+		db.sqliteMu = new(sync.Mutex)
+	}
 
 	if conf.ReadonlyHosts != nil {
 		readonlyConnections := make([]*sql.DB, 0)
@@ -555,6 +558,9 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 
 	db.Error = nil
 	db.Config = conf
+	if (conf.Type == "sqlite" || conf.Type == "sqlite3") && conf.MaxOpens == 0 {
+		conf.MaxOpens = 100
+	}
 	if conf.MaxIdles > 0 {
 		conn.SetMaxIdleConns(conf.MaxIdles)
 	}
@@ -567,6 +573,25 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 	if conf.LogSlow == 0 {
 		conf.LogSlow = config.Duration(1000 * time.Millisecond)
 	}
+
+	if conf.Type == "sqlite" || conf.Type == "sqlite3" {
+		baseExecRaw(conn, nil, "PRAGMA journal_mode=WAL")
+		baseExecRaw(conn, nil, "PRAGMA synchronous=NORMAL")
+		baseExecRaw(conn, nil, "PRAGMA busy_timeout=5000")
+		baseExecRaw(conn, nil, "PRAGMA temp_store=MEMORY")
+		baseExecRaw(conn, nil, "PRAGMA cache_size=-2000")
+
+		// Dynamic mmap_size: 1/4 of system memory, max 30GB
+		mmapLimit := int64(30000000000)
+		sysMemStr := runShell("sysctl -n hw.memsize || free -b | awk '/Mem:/ {print $2}'")
+		if sysMem := cast.Int64(sysMemStr); sysMem > 0 {
+			if mmapLimit > sysMem/4 {
+				mmapLimit = sysMem / 4
+			}
+		}
+		baseExecRaw(conn, nil, fmt.Sprintf("PRAGMA mmap_size=%d", mmapLimit))
+	}
+
 	if useCache {
 		dbInstancesLock.Lock()
 		dbInstances[name] = db
@@ -591,6 +616,13 @@ func getPoolForHost(conf *Config, host string) (*sql.DB, error) {
 	if connector := connectors[conf.Type]; connector != nil {
 		return sql.OpenDB(connector(conf, conf.pwd, conf.tls)), nil
 	} else {
+		if (conf.Type == "sqlite" || conf.Type == "sqlite3") && !strings.Contains(conf.Args, "journal_mode") {
+			if conf.Args != "" {
+				conf.Args += "&"
+			}
+			conf.Args += "_journal_mode=WAL&_busy_timeout=5000&_pragma=synchronous(1)&_pragma=cache_size(-2000)"
+		}
+
 		dsn := ""
 		args := make([]string, 0)
 		if conf.SSL != "" {
@@ -624,6 +656,7 @@ func (db *DB) CopyByLogger(logger *log.Logger) *DB {
 	newDB.Config = db.Config
 	newDB.tables = db.tables
 	newDB.tablesLock = db.tablesLock
+	newDB.sqliteMu = db.sqliteMu
 	if logger == nil {
 		logger = log.DefaultLogger
 	}
@@ -660,6 +693,7 @@ func (db *DB) GetOriginDB() *sql.DB {
 func (db *DB) Prepare(query string) *Stmt {
 	stmt := basePrepare(db.conn, nil, query)
 	stmt.logger = db.logger
+	stmt.sqliteMu = db.sqliteMu
 	if stmt.Error != nil {
 		db.logger.LogError(stmt.Error.Error())
 	}
@@ -676,19 +710,22 @@ func (db *DB) Quotes(texts []string) string {
 
 func (db *DB) Begin() *Tx {
 	if db.conn == nil {
-		return &Tx{db: db, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), Error: errors.New("operate on a bad connection"), logger: db.logger}
+		return &Tx{db: db, sqliteMu: db.sqliteMu, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), Error: errors.New("operate on a bad connection"), logger: db.logger}
 	}
 	sqlTx, err := db.conn.Begin()
 	if err != nil {
 		db.logger.LogError(err.Error())
-		return &Tx{db: db, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), Error: err, logger: db.logger}
+		return &Tx{db: db, sqliteMu: db.sqliteMu, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), Error: err, logger: db.logger}
 	}
-	return &Tx{db: db, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), conn: sqlTx, logger: db.logger}
+	return &Tx{db: db, sqliteMu: db.sqliteMu, QuoteTag: db.QuoteTag, logSlow: db.Config.LogSlow.TimeDuration(), conn: sqlTx, logger: db.logger}
 }
 
 func (db *DB) Exec(query string, args ...any) *ExecResult {
 	query, args = db.rewriteFTS(query, args)
-	r := baseExec(db.conn, nil, query, args...)
+	args = flatArgs(args)
+	db.lock()
+	r := baseExecRaw(db.conn, nil, query, args...)
+	db.unlock()
 	r.logger = db.logger
 	if r.Error != nil {
 		db.logger.LogQueryError(r.Error.Error(), query, args, r.usedTime)
@@ -698,22 +735,16 @@ func (db *DB) Exec(query string, args ...any) *ExecResult {
 		}
 	}
 	return r
+}
+
+func (db *DB) rawExec(query string, args ...any) *ExecResult {
+	return db.Exec(query, args...)
 }
 
 func (db *DB) Query(query string, args ...any) *QueryResult {
 	query, args = db.rewriteFTS(query, args)
-	conn := db.conn
-	if db.readonlyConnections != nil {
-		connNum := len(db.readonlyConnections)
-		if connNum == 1 {
-			conn = db.readonlyConnections[0]
-		} else {
-			p := rand.Int(0, connNum-1)
-			conn = db.readonlyConnections[p]
-		}
-	}
-
-	r := baseQuery(conn, nil, query, args...)
+	args = flatArgs(args)
+	r := baseQueryRaw(db.conn, nil, query, args...)
 	r.logger = db.logger
 	if r.Error != nil {
 		db.logger.LogQueryError(r.Error.Error(), query, args, r.usedTime)
@@ -724,6 +755,24 @@ func (db *DB) Query(query string, args ...any) *QueryResult {
 	}
 	return r
 }
+
+func (db *DB) rawQuery(query string, args ...any) *QueryResult {
+	return db.Query(query, args...)
+}
+
+
+func (db *DB) lock() {
+	if db.sqliteMu != nil {
+		db.sqliteMu.Lock()
+	}
+}
+
+func (db *DB) unlock() {
+	if db.sqliteMu != nil {
+		db.sqliteMu.Unlock()
+	}
+}
+
 
 var identifierRegex = `(?:['"` + "`" + `][^'"` + "`" + `]+['"` + "`" + `]|[\w\-]+)`
 var likeFieldReg = regexp.MustCompile(`(?i)(` + identifierRegex + `(?:\.` + identifierRegex + `)*)\s+LIKE\s*$`)
@@ -917,44 +966,17 @@ func (db *DB) extractTableName(query string, field string) string {
 
 func (db *DB) Insert(table string, data any) *ExecResult {
 	query, values := db.MakeInsertSql(table, data, false)
-	r := baseExec(db.conn, nil, query, values...)
-	r.logger = db.logger
-	if r.Error != nil {
-		db.logger.LogQueryError(r.Error.Error(), query, values, r.usedTime)
-	} else {
-		if db.Config.LogSlow > 0 && r.usedTime >= float32(db.Config.LogSlow.TimeDuration()/time.Millisecond) {
-			db.logger.LogQuery(query, values, r.usedTime)
-		}
-	}
-	return r
+	return db.Exec(query, values...)
 }
 
 func (db *DB) Replace(table string, data any) *ExecResult {
 	query, values := db.MakeInsertSql(table, data, true)
-	r := baseExec(db.conn, nil, query, values...)
-	r.logger = db.logger
-	if r.Error != nil {
-		db.logger.LogQueryError(r.Error.Error(), query, values, r.usedTime)
-	} else {
-		if db.Config.LogSlow > 0 && r.usedTime >= float32(db.Config.LogSlow.TimeDuration()/time.Millisecond) {
-			db.logger.LogQuery(query, values, r.usedTime)
-		}
-	}
-	return r
+	return db.Exec(query, values...)
 }
 
 func (db *DB) Update(table string, data any, conditions string, args ...any) *ExecResult {
 	query, values := db.MakeUpdateSql(table, data, conditions, args...)
-	r := baseExec(db.conn, nil, query, values...)
-	r.logger = db.logger
-	if r.Error != nil {
-		db.logger.LogQueryError(r.Error.Error(), query, values, r.usedTime)
-	} else {
-		if db.Config.LogSlow > 0 && r.usedTime >= float32(db.Config.LogSlow.TimeDuration()/time.Millisecond) {
-			db.logger.LogQuery(query, values, r.usedTime)
-		}
-	}
-	return r
+	return db.Exec(query, values...)
 }
 
 func (db *DB) Delete(table string, conditions string, args ...any) *ExecResult {
@@ -964,16 +986,7 @@ func (db *DB) Delete(table string, conditions string, args ...any) *ExecResult {
 			conditions = " where " + conditions
 		}
 		query := fmt.Sprintf("delete from %s%s", db.Quote(table), conditions)
-		r := baseExec(db.conn, nil, query, args...)
-		r.logger = db.logger
-		if r.Error != nil {
-			db.logger.LogQueryError(r.Error.Error(), query, args, r.usedTime)
-		} else {
-			if db.Config.LogSlow > 0 && r.usedTime >= float32(db.Config.LogSlow.TimeDuration()/time.Millisecond) {
-				db.logger.LogQuery(query, args, r.usedTime)
-			}
-		}
-		return r
+		return db.Exec(query, args...)
 	}
 
 	// Shadow delete
@@ -1007,7 +1020,7 @@ func (db *DB) getTable(table string) *TableStruct {
 	var query string
 	if db.Config.Type == "mysql" {
 		query = "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?"
-		res := db.Query(query, db.Config.DB, table)
+		res := db.rawQuery(query, db.Config.DB, table)
 		rows := res.MapResults()
 		for _, row := range rows {
 			col := cast.String(row["COLUMN_NAME"])
@@ -1026,7 +1039,7 @@ func (db *DB) getTable(table string) *TableStruct {
 		}
 	} else if db.Config.Type == "postgres" || db.Config.Type == "pgx" {
 		query = "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?"
-		res := db.Query(query, table)
+		res := db.rawQuery(query, table)
 		rows := res.MapResults()
 		for _, row := range rows {
 			col := cast.String(row["column_name"])
@@ -1047,7 +1060,7 @@ func (db *DB) getTable(table string) *TableStruct {
 	} else if isFileDB(db.Config.Type) {
 		// For SQLite
 		query := fmt.Sprintf("PRAGMA table_info(%s)", db.Quote(table))
-		res := db.Query(query)
+		res := db.rawQuery(query)
 		rows := res.MapResults()
 		for _, row := range rows {
 			colName := cast.String(row["name"])
@@ -1078,19 +1091,19 @@ func (db *DB) getTable(table string) *TableStruct {
 	shadowTable := table + "_deleted"
 	if db.Config.Type == "mysql" {
 		query = "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?"
-		res := db.Query(query, db.Config.DB, shadowTable)
+		res := db.rawQuery(query, db.Config.DB, shadowTable)
 		if res.StringOnR1C1() != "" {
 			ts.HasShadowTable = true
 		}
 	} else if db.Config.Type == "postgres" || db.Config.Type == "pgx" {
 		query = "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?"
-		res := db.Query(query, shadowTable)
+		res := db.rawQuery(query, shadowTable)
 		if res.StringOnR1C1() != "" {
 			ts.HasShadowTable = true
 		}
 	} else if isFileDB(db.Config.Type) {
 		query = "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
-		res := db.Query(query, shadowTable)
+		res := db.rawQuery(query, shadowTable)
 		if res.StringOnR1C1() != "" {
 			ts.HasShadowTable = true
 		}

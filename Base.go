@@ -68,7 +68,10 @@ func basePrepare(db *sql.DB, tx *sql.Tx, query string) *Stmt {
 }
 
 func baseExec(db *sql.DB, tx *sql.Tx, query string, args ...any) *ExecResult {
-	args = flatArgs(args)
+	return baseExecRaw(db, tx, query, flatArgs(args)...)
+}
+
+func baseExecRaw(db *sql.DB, tx *sql.Tx, query string, args ...any) *ExecResult {
 	var r sql.Result
 	var err error
 	startTime := time.Now()
@@ -107,8 +110,10 @@ func flatArgs(args []any) []any {
 }
 
 func baseQuery(db *sql.DB, tx *sql.Tx, query string, args ...any) *QueryResult {
-	args = flatArgs(args)
+	return baseQueryRaw(db, tx, query, flatArgs(args)...)
+}
 
+func baseQueryRaw(db *sql.DB, tx *sql.Tx, query string, args ...any) *QueryResult {
 	var rows *sql.Rows
 	var err error
 	startTime := time.Now()
@@ -127,6 +132,7 @@ func baseQuery(db *sql.DB, tx *sql.Tx, query string, args ...any) *QueryResult {
 	}
 	return &QueryResult{Sql: &query, Args: args, usedTime: usedTime, rows: rows}
 }
+
 
 func quote(quoteTag string, text string) string {
 	a := strings.Split(text, ".")

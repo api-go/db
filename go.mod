@@ -9,7 +9,6 @@ require (
 	apigo.cc/go/file v1.3.2
 	apigo.cc/go/id v1.3.1
 	apigo.cc/go/log v1.3.4
-	apigo.cc/go/rand v1.3.1
 	apigo.cc/go/redis v1.3.2
 	apigo.cc/go/safe v1.3.1
 	apigo.cc/go/shell v1.3.1
@@ -21,6 +20,7 @@ require (
 
 require (
 	apigo.cc/go/encoding v1.3.1 // indirect
+	apigo.cc/go/rand v1.3.1 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect

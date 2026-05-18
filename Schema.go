@@ -307,6 +307,8 @@ func (db *DB) Sync(desc string) error {
 	return outErr
 }
 
+
+
 // CheckTable 检查并同步单个表结构
 func (db *DB) CheckTable(table *TableStruct) error {
 	fieldSets := make([]string, 0)
