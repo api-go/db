@@ -6,3 +6,6 @@ env.json
 env.yml
 env.yaml
 /CODE-FULL.md
+*.db
+*.db-shm
+*.db-wal
