@@ -33,12 +33,12 @@ func (jd *jsDB) checkSafe() error {
 	return nil
 }
 
-// Read Operations (Always allowed)
+// Read Operations
 func (jd *jsDB) Query(query string, args ...any) *QueryResult {
 	return jd.db.Query(query, args...)
 }
 
-// Write Operations (Restricted in SafeMode)
+// Write Operations
 func (jd *jsDB) Exec(query string, args ...any) *ExecResult {
 	if jd.checkSafe() != nil {
 		return &ExecResult{Error: errSafeMode}
@@ -74,11 +74,71 @@ func (jd *jsDB) Replace(table string, data any) *ExecResult {
 	return jd.db.Replace(table, data)
 }
 
-// Metadata
-func (jd *jsDB) InKeys(numArgs int) string {
-	return jd.db.InKeys(numArgs)
+// Transaction Support
+func (jd *jsDB) Begin() (*jsTx, error) {
+	// Note: We don't block Begin() itself, but destructive operations within Tx will be blocked
+	tx := jd.db.Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	return &jsTx{tx: tx, ctx: jd.ctx}, nil
 }
 
-func (jd *jsDB) Quote(text string) string {
-	return jd.db.Quote(text)
+// jsTx wraps *Tx for JS environment
+type jsTx struct {
+	tx  *Tx
+	ctx context.Context
 }
+
+func (jt *jsTx) checkSafe() error {
+	if jsmod.IsSafeMode(jt.ctx) {
+		return errSafeMode
+	}
+	return nil
+}
+
+func (jt *jsTx) Query(query string, args ...any) *QueryResult {
+	return jt.tx.Query(query, args...)
+}
+
+func (jt *jsTx) Exec(query string, args ...any) *ExecResult {
+	if jt.checkSafe() != nil {
+		return &ExecResult{Error: errSafeMode}
+	}
+	return jt.tx.Exec(query, args...)
+}
+
+func (jt *jsTx) Insert(table string, data any) *ExecResult {
+	if jt.checkSafe() != nil {
+		return &ExecResult{Error: errSafeMode}
+	}
+	return jt.tx.Insert(table, data)
+}
+
+func (jt *jsTx) Update(table string, data any, conditions string, args ...any) *ExecResult {
+	if jt.checkSafe() != nil {
+		return &ExecResult{Error: errSafeMode}
+	}
+	return jt.tx.Update(table, data, conditions, args...)
+}
+
+func (jt *jsTx) Delete(table string, conditions string, args ...any) *ExecResult {
+	if jt.checkSafe() != nil {
+		return &ExecResult{Error: errSafeMode}
+	}
+	return jt.tx.Delete(table, conditions, args...)
+}
+
+func (jt *jsTx) Replace(table string, data any) *ExecResult {
+	if jt.checkSafe() != nil {
+		return &ExecResult{Error: errSafeMode}
+	}
+	return jt.tx.Replace(table, data)
+}
+
+func (jt *jsTx) Commit() error   { return jt.tx.Commit() }
+func (jt *jsTx) Rollback() error { return jt.tx.Rollback() }
+
+// Metadata
+func (jd *jsDB) InKeys(numArgs int) string { return jd.db.InKeys(numArgs) }
+func (jd *jsDB) Quote(text string) string  { return jd.db.Quote(text) }
