@@ -1,5 +1,9 @@
 # 变更记录 - @go/db
 
+## [1.3.5] - 2026-05-30
+- **新增**: 注册到 `jsmod`。
+- **安全性**: 引入基于 Context 的细粒度权限控制。在 `SafeMode` 下，仅允许读取操作（Query），所有写操作（Exec/Insert/Update/Delete/Replace）将被拦截并返回错误。严禁通过 JS 动态创建连接或同步 Schema。
+
 ## [1.0.12] - 2026-05-17
 - **SQLite 极致优化 (超高并发支持)**:
     - **读写分离与零锁读取**: 读操作 (`Query`) 实现零锁定，配合 WAL 模式彻底解决读写互斥问题；写操作由应用层 `sync.Mutex` 统一排队，规避 `database is locked` 错误。
