@@ -1,5 +1,16 @@
 # 变更记录 - @go/db
 
+## [1.5.1] - 2026-06-04
+- **架构重构: 两阶段 (Two-Pass) 索引命名生成**:
+  - 重构了 `CheckTable` 中的 Schema 同步逻辑，从“边解析边生成”改为两阶段处理。现在多列联合索引（无论是 Unique, Index 还是 Fulltext）的名字会根据包含的**字段名称自动拼接生成**（如 `uk_user_name_phone`），替代了以前难以溯源的分组号（如 `uk_user_1`），极大提升了 DBA 在数据库维护时的可读性与直观性。
+  - **超长防断机制**: 当生成的索引名称超过 60 个字符时，自动进行截断，并在末尾追加原完整名称的 6 位 MD5 Hash，完美规避了各种 RDBMS 对标识符 64 字符长度限制引发的建表错误。
+- **稳定性修复: 幂等性增强**:
+  - 为所有支持的数据库（特别是 SQLite 和 PostgreSQL）的 `CREATE INDEX` 及 `CREATE UNIQUE INDEX` 语句增加了 `IF NOT EXISTS` 容错保护。
+  - **SQLite 特效探测**: 修复了对 SQLite 多列索引结构探测的 Bug，现在它能准确匹配基于列组隐式创建的索引（如 `sqlite_autoindex`），并将其视作等效的已存在约束跳过重建。彻底根除了在系统重启及结构同步期间偶现的 `UNIQUE constraint failed` 致命崩溃。
+
+## [1.5.0] - 2026-05-10
+- **基础设施对齐**: 全局对齐至 v1.5.0。
+
 ## [1.3.5] - 2026-05-30
 - **新增**: 注册到 `jsmod`。
 - **安全性**: 引入基于 Context 的细粒度权限控制。在 `SafeMode` 下，仅允许读取操作（Query），所有写操作（Exec/Insert/Update/Delete/Replace）将被拦截并返回错误。严禁通过 JS 动态创建连接或同步 Schema。

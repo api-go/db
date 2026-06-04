@@ -1,6 +1,8 @@
 package db
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
@@ -321,84 +323,106 @@ func (db *DB) CheckTable(table *TableStruct) error {
 	isPostgres := db.Config.Type == "pg" || db.Config.Type == "pgsql" || db.Config.Type == "postgres"
 
 	table.Columns = make([]string, 0, len(table.Fields))
+
+	// 阶段一：收集所有属于同一索引组的字段
+	type indexGroupDef struct {
+		Type   string
+		Fields []string
+	}
+	indexGroups := make(map[string]*indexGroupDef)
+
 	for i, field := range table.Fields {
 		field.Parse(db.Config.Type)
 		table.Fields[i] = field
 		table.Columns = append(table.Columns, field.Name)
 
-		switch strings.ToLower(field.Index) {
-		case "pk", "primary key":
+		idxType := strings.ToLower(field.Index)
+		if idxType == "pk" || idxType == "primary key" {
 			pks = append(pks, field.Name)
-		case "unique":
-			keyName := fmt.Sprint("uk_", table.Name, "_", field.Name)
-			if field.IndexGroup != "" {
-				keyName = fmt.Sprint("uk_", table.Name, "_", field.IndexGroup)
+		} else if idxType == "unique" || idxType == "index" || idxType == "fulltext" {
+			group := field.IndexGroup
+			if group == "" {
+				group = field.Name
 			}
-			if keySetBy[keyName] != "" {
-				keySetFields[keyName] += " " + field.Name
-				if strings.HasPrefix(db.Config.Type, "sqlite") || db.Config.Type == "chai" {
-					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ")", ", "+db.Quote(field.Name)+")", 1)
-				} else if isPostgres {
-					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ")", ", "+db.Quote(field.Name)+")", 1)
-				} else {
-					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ") COMMENT", ", "+db.Quote(field.Name)+") COMMENT", 1)
+			groupKey := idxType + "_" + group
+			if _, exists := indexGroups[groupKey]; !exists {
+				indexGroups[groupKey] = &indexGroupDef{Type: idxType, Fields: []string{}}
+			}
+			indexGroups[groupKey].Fields = append(indexGroups[groupKey].Fields, field.Name)
+		}
+	}
+
+	// 阶段二：生成字段定义与索引定义
+	processedGroups := make(map[string]bool)
+
+	for _, field := range table.Fields {
+		idxType := strings.ToLower(field.Index)
+		if idxType == "unique" || idxType == "index" || idxType == "fulltext" {
+			group := field.IndexGroup
+			if group == "" {
+				group = field.Name
+			}
+			groupKey := idxType + "_" + group
+
+			if !processedGroups[groupKey] {
+				processedGroups[groupKey] = true
+				groupDef := indexGroups[groupKey]
+
+				// 根据组合的字段名拼接生成长索引名
+				joinedFields := strings.Join(groupDef.Fields, "_")
+				prefix := "ik"
+				if idxType == "unique" {
+					prefix = "uk"
+				} else if idxType == "fulltext" {
+					prefix = "tk"
 				}
-			} else {
-				keySetFields[keyName] = field.Name
-				keySet := ""
-				if strings.HasPrefix(db.Config.Type, "sqlite") || db.Config.Type == "chai" {
-					keySet = fmt.Sprintf("CREATE UNIQUE INDEX \"%s\" ON \"%s\" (\"%s\")", keyName, table.Name, field.Name)
-				} else if isPostgres {
-					keySet = fmt.Sprintf("CREATE UNIQUE INDEX \"%s\" ON \"%s\" (\"%s\")", keyName, table.Name, field.Name)
-				} else {
-					keySet = fmt.Sprintf("UNIQUE KEY "+db.Quote("%s")+" ("+db.Quote("%s")+") COMMENT '%s'", keyName, field.Name, field.Comment)
+				keyName := fmt.Sprintf("%s_%s_%s", prefix, table.Name, joinedFields)
+
+				// 防超长截断处理 (最大 64，留 4 个给安全余量，设为 60)
+				if len(keyName) > 60 {
+					hash := md5.Sum([]byte(keyName))
+					hashStr := hex.EncodeToString(hash[:])[:6]
+					keyName = keyName[:53] + "_" + hashStr
 				}
-				keySets = append(keySets, keySet)
-				keySetBy[keyName] = keySet
-			}
-		case "fulltext":
-			ftsFields = append(ftsFields, field.Name)
-			keyName := fmt.Sprint("tk_", table.Name, "_", field.Name)
-			keySet := ""
-			if isPostgres {
-				// 使用 simple 分词器，配合应用层的分词结果
-				keySet = fmt.Sprintf("CREATE INDEX \"%s\" ON \"%s\" USING GIN (to_tsvector('simple', \"%s\"))", keyName, table.Name, field.Name)
-			} else if !strings.HasPrefix(db.Config.Type, "sqlite") && db.Config.Type != "chai" {
-				keySet = fmt.Sprintf("FULLTEXT KEY "+db.Quote("%s")+" ("+db.Quote("%s")+") COMMENT '%s'", keyName, field.Name, field.Comment)
-			} else {
-				// SQLite 使用 FTS5，这里不生成普通索引
-				keySet = ""
-			}
-			if keySet != "" {
-				keySets = append(keySets, keySet)
-				keySetBy[keyName] = keySet
-			}
-		case "index":
-			keyName := fmt.Sprint("ik_", table.Name, "_", field.Name)
-			if field.IndexGroup != "" {
-				keyName = fmt.Sprint("ik_", table.Name, "_", field.IndexGroup)
-			}
-			if keySetBy[keyName] != "" {
-				keySetFields[keyName] += " " + field.Name
-				if strings.HasPrefix(db.Config.Type, "sqlite") || db.Config.Type == "chai" {
-					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ")", ", \""+field.Name+"\")", 1)
-				} else if isPostgres {
-					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ")", ", \""+field.Name+"\")", 1)
-				} else {
-					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ") COMMENT", ", `"+field.Name+"`) COMMENT", 1)
+
+				keySetFields[keyName] = strings.Join(groupDef.Fields, " ")
+
+				if idxType == "fulltext" {
+					ftsFields = append(ftsFields, groupDef.Fields...)
+					keySet := ""
+					if isPostgres {
+						// PostgreSQL 使用 simple 分词器
+						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" USING GIN (to_tsvector('simple', \"%s\"))", keyName, table.Name, groupDef.Fields[0])
+					} else if !strings.HasPrefix(db.Config.Type, "sqlite") && db.Config.Type != "chai" {
+						keySet = fmt.Sprintf("FULLTEXT KEY "+db.Quote("%s")+" ("+db.Quotes(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
+					}
+					if keySet != "" {
+						keySets = append(keySets, keySet)
+						keySetBy[keyName] = keySet
+					}
+				} else if idxType == "unique" {
+					keySet := ""
+					if strings.HasPrefix(db.Config.Type, "sqlite") || db.Config.Type == "chai" {
+						keySet = fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.Quotes(groupDef.Fields))
+					} else if isPostgres {
+						keySet = fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.Quotes(groupDef.Fields))
+					} else {
+						keySet = fmt.Sprintf("UNIQUE KEY "+db.Quote("%s")+" ("+db.Quotes(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
+					}
+					keySets = append(keySets, keySet)
+					keySetBy[keyName] = keySet
+				} else { // index
+					keySet := ""
+					if strings.HasPrefix(db.Config.Type, "sqlite") || db.Config.Type == "chai" {
+						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.Quotes(groupDef.Fields))
+					} else if isPostgres {
+						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.Quotes(groupDef.Fields))
+					} else {
+						keySet = fmt.Sprintf("KEY "+db.Quote("%s")+" ("+db.Quotes(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
+					}
+					keySets = append(keySets, keySet)
+					keySetBy[keyName] = keySet
 				}
-			} else {
-				keySetFields[keyName] = field.Name
-				keySet := ""
-				if strings.HasPrefix(db.Config.Type, "sqlite") || db.Config.Type == "chai" {
-					keySet = fmt.Sprintf("CREATE INDEX \"%s\" ON \"%s\" (\"%s\")", keyName, table.Name, field.Name)
-				} else if isPostgres {
-					keySet = fmt.Sprintf("CREATE INDEX \"%s\" ON \"%s\" (\"%s\")", keyName, table.Name, field.Name)
-				} else {
-					keySet = fmt.Sprintf("KEY "+db.Quote("%s")+" ("+db.Quote("%s")+") COMMENT '%s'", keyName, field.Name, field.Comment)
-				}
-				keySets = append(keySets, keySet)
-				keySetBy[keyName] = keySet
 			}
 		}
 		fieldSets = append(fieldSets, field.Desc)
@@ -419,6 +443,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		oldFieldList := make([]*tableFieldDesc, 0)
 		oldFields := make(map[string]*tableFieldDesc)
 		oldIndexes := make(map[string]string)
+		oldUniqueMap := make(map[string]bool)
 		oldIndexInfos := make([]*tableKeyDesc, 0)
 		oldComments := map[string]string{}
 
@@ -452,6 +477,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 				return err
 			}
 			for _, i := range tmpIndexes {
+				oldUniqueMap[i.Name] = i.Unique == 1
 				tmpIndexInfo := []struct {
 					Name  string
 					Seqno int
@@ -460,10 +486,10 @@ func (db *DB) CheckTable(table *TableStruct) error {
 				if err := db.Query("PRAGMA index_info(" + db.Quote(i.Name) + ")").To(&tmpIndexInfo); err != nil {
 					return err
 				}
-				if len(tmpIndexInfo) > 0 {
+				for _, ii := range tmpIndexInfo {
 					oldIndexInfos = append(oldIndexInfos, &tableKeyDesc{
 						Key_name:    i.Name,
-						Column_name: tmpIndexInfo[0].Name,
+						Column_name: ii.Name,
 					})
 				}
 			}
@@ -602,7 +628,22 @@ func (db *DB) CheckTable(table *TableStruct) error {
 
 		for keyId, keySet := range keySetBy {
 			if oldIndexes[keyId] == "" || (!isPostgres && strings.ToLower(oldIndexes[keyId]) != strings.ToLower(keySetFields[keyId])) {
-				if strings.HasPrefix(db.Config.Type, "sqlite") || isPostgres {
+				if strings.HasPrefix(db.Config.Type, "sqlite") {
+					// 针对 SQLite 优化：如果索引名不匹配，但存在一个相同列组的唯一索引（如 sqlite_autoindex），则跳过
+					if strings.Contains(keySet, "UNIQUE") {
+						foundUnique := false
+						for oldName, oldCols := range oldIndexes {
+							if oldUniqueMap[oldName] && strings.ToLower(oldCols) == strings.ToLower(keySetFields[keyId]) {
+								foundUnique = true
+								break
+							}
+						}
+						if foundUnique {
+							continue
+						}
+					}
+					actions = append(actions, keySet)
+				} else if isPostgres {
 					actions = append(actions, keySet)
 				} else {
 					actions = append(actions, "ADD "+keySet)
