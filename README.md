@@ -22,8 +22,10 @@ go get apigo.cc/go/db
 ## 🛠 API 指南
 
 ### 1. 核心方法
+- **`SetConfig(name, setting string)`**
+  - 动态设置数据库配置（不依赖配置文件），可通过别名获取连接。
 - **`GetDB(name string, logger *log.Logger) *DB`**
-  - 获取数据库连接实例。`name` 可以是 `db.json` 中的配置名，也可以是标准 DSN（如 `mysql://user:pwd@host:port/db` 或 `sqlite://test.db`）。
+  - 获取数据库连接实例。`name` 可以是别名、`db.json` 中的配置名，也可以是标准 DSN（如 `mysql://user:pwd@host:port/db` 或 `sqlite://test.db`）。
 - **`Sync(schema string) error`**
   - 解析 DSL 并同步数据库表结构。用于创建表（包括 `_deleted` 表）和索引。详见 [架构 DSL 指南](./DSL.md)。
 

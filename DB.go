@@ -412,6 +412,59 @@ func Begin() *Tx {
 	return d.Begin()
 }
 
+func SetConfig(name, setting string) {
+	loadConfigs(nil)
+	conf := new(Config)
+	conf.ConfigureBy(setting)
+	dbConfigsLock.Lock()
+	dbConfigs[name] = conf
+	dbConfigsLock.Unlock()
+}
+
+func loadConfigs(logger *log.Logger) {
+	once.Do(func() {
+		if logger == nil {
+			logger = log.DefaultLogger
+		}
+		dbConfigs1 := make(map[string]*Config)
+		if err := config.Load(&dbConfigs1, "db"); err == nil {
+			for k, v := range dbConfigs1 {
+				if v.Host != "" {
+					dbConfigsLock.Lock()
+					dbConfigs[k] = v
+					dbConfigsLock.Unlock()
+				}
+			}
+		} else {
+			logger.Error(err.Error())
+		}
+		dbConfigs2 := make(map[string]string)
+		if err := config.Load(&dbConfigs2, "db"); err == nil {
+			for k, v := range dbConfigs2 {
+				if strings.Contains(v, "://") {
+					v2 := new(Config)
+					v2.ConfigureBy(v)
+					if v2.Host != "" {
+						v2.logger = logger
+						dbConfigsLock.Lock()
+						dbConfigs[k] = v2
+						dbConfigsLock.Unlock()
+					}
+				} else {
+					dbConfigsLock.Lock()
+					v2 := dbConfigs[v]
+					if v2 != nil && v2.Host != "" {
+						dbConfigs[k] = v2
+					}
+					dbConfigsLock.Unlock()
+				}
+			}
+		} else {
+			logger.Error(err.Error())
+		}
+	})
+}
+
 func getDB(name string, logger *log.Logger, useCache bool) *DB {
 	if logger == nil {
 		logger = log.DefaultLogger
@@ -432,49 +485,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 		conf.logger = logger
 		conf.ConfigureBy(name)
 	} else {
-		dbConfigsLock.RLock()
-		n := len(dbConfigs)
-		dbConfigsLock.RUnlock()
-		if n == 0 {
-			once.Do(func() {
-				dbConfigs1 := make(map[string]*Config)
-				if err := config.Load(&dbConfigs1, "db"); err == nil {
-					for k, v := range dbConfigs1 {
-						if v.Host != "" {
-							dbConfigsLock.Lock()
-							dbConfigs[k] = v
-							dbConfigsLock.Unlock()
-						}
-					}
-				} else {
-					logger.Error(err.Error())
-				}
-				dbConfigs2 := make(map[string]string)
-				if err := config.Load(&dbConfigs2, "db"); err == nil {
-					for k, v := range dbConfigs2 {
-						if strings.Contains(v, "://") {
-							v2 := new(Config)
-							v2.ConfigureBy(v)
-							if v2.Host != "" {
-								v2.logger = logger
-								dbConfigsLock.Lock()
-								dbConfigs[k] = v2
-								dbConfigsLock.Unlock()
-							}
-						} else {
-							dbConfigsLock.Lock()
-							v2 := dbConfigs[v]
-							if v2 != nil && v2.Host != "" {
-								dbConfigs[k] = v2
-							}
-							dbConfigsLock.Unlock()
-						}
-					}
-				} else {
-					logger.Error(err.Error())
-				}
-			})
-		}
+		loadConfigs(logger)
 		dbConfigsLock.RLock()
 		conf = dbConfigs[name]
 		dbConfigsLock.RUnlock()
