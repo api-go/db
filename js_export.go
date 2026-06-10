@@ -12,48 +12,106 @@ import (
 
 func init() {
 	jsmod.Register("db", map[string]any{
-		"get": func(ctx context.Context, name string) (*jsDB, error) {
-			isReadOnly := false
-
-			// 安全模式下的动态判定
-			if jsmod.IsSafeMode(ctx) {
-				if strings.HasPrefix(name, "sqlite://") {
-					// 1. SQLite 路径校验
-					path := strings.TrimPrefix(name, "sqlite://")
-					if idx := strings.Index(path, "?"); idx != -1 {
-						path = path[:idx]
-					}
-					// 如果路径不在沙箱内，VerifyPathForSafeMode 会直接返回 error，阻止连接
-					_, err := file.VerifyPathForSafeMode(ctx, path)
-					if err != nil {
-						return nil, err
-					}
-					isReadOnly = false
-				} else {
-					// 2. 远程数据库前缀校验
-					var allowedDSNs []string
-					cast.Convert(&allowedDSNs, jsmod.Get(ctx, "AllowedDSNs"))
-					matched := false
-					for _, prefix := range allowedDSNs {
-						if strings.HasPrefix(name, prefix) {
-							matched = true
-							break
-						}
-					}
-					if !matched {
-						// 未命中白名单，降级为只读模式
-						isReadOnly = true
-					}
-				}
+		// 入口：支持别名获取，不传则默认 "default"
+		"Get": func(ctx context.Context, name *string) (*jsDB, error) {
+			target := "default"
+			if name != nil {
+				target = *name
 			}
+			return getJSDB(ctx, target)
+		},
 
-			d := GetDB(name, nil)
-			if d.Error != nil {
-				return nil, d.Error
+		// 默认快捷调用 (面向 "default" 实例)
+		"Query": func(ctx context.Context, query string, args ...any) (*QueryResult, error) {
+			jd, err := getJSDB(ctx, "default")
+			if err != nil {
+				return nil, err
 			}
-			return &jsDB{db: d, ctx: ctx, isReadOnly: isReadOnly}, nil
+			return jd.Query(query, args...), nil
+		},
+		"Exec": func(ctx context.Context, query string, args ...any) (*ExecResult, error) {
+			jd, err := getJSDB(ctx, "default")
+			if err != nil {
+				return nil, err
+			}
+			return jd.Exec(query, args...), nil
+		},
+		"Insert": func(ctx context.Context, table string, data any) (*ExecResult, error) {
+			jd, err := getJSDB(ctx, "default")
+			if err != nil {
+				return nil, err
+			}
+			return jd.Insert(table, data), nil
+		},
+		"Update": func(ctx context.Context, table string, data any, conditions string, args ...any) (*ExecResult, error) {
+			jd, err := getJSDB(ctx, "default")
+			if err != nil {
+				return nil, err
+			}
+			return jd.Update(table, data, conditions, args...), nil
+		},
+		"Delete": func(ctx context.Context, table string, conditions string, args ...any) (*ExecResult, error) {
+			jd, err := getJSDB(ctx, "default")
+			if err != nil {
+				return nil, err
+			}
+			return jd.Delete(table, conditions, args...), nil
+		},
+		"Replace": func(ctx context.Context, table string, data any) (*ExecResult, error) {
+			jd, err := getJSDB(ctx, "default")
+			if err != nil {
+				return nil, err
+			}
+			return jd.Replace(table, data), nil
+		},
+		"Begin": func(ctx context.Context) (*jsTx, error) {
+			jd, err := getJSDB(ctx, "default")
+			if err != nil {
+				return nil, err
+			}
+			return jd.Begin()
 		},
 	})
+}
+
+func getJSDB(ctx context.Context, name string) (*jsDB, error) {
+	isReadOnly := false
+
+	// 安全模式下的动态判定
+	if jsmod.IsSafeMode(ctx) {
+		if strings.HasPrefix(name, "sqlite://") {
+			// 1. SQLite 路径校验
+			path := strings.TrimPrefix(name, "sqlite://")
+			if idx := strings.Index(path, "?"); idx != -1 {
+				path = path[:idx]
+			}
+			_, err := file.VerifyPathForSafeMode(ctx, path)
+			if err != nil {
+				return nil, err
+			}
+			isReadOnly = false
+		} else {
+			// 2. 远程数据库前缀校验
+			var allowedDSNs []string
+			cast.Convert(&allowedDSNs, jsmod.Get(ctx, "AllowedDSNs"))
+			matched := false
+			for _, prefix := range allowedDSNs {
+				if strings.HasPrefix(name, prefix) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				isReadOnly = true
+			}
+		}
+	}
+
+	d := GetDB(name, nil)
+	if d.Error != nil {
+		return nil, d.Error
+	}
+	return &jsDB{db: d, ctx: ctx, isReadOnly: isReadOnly}, nil
 }
 
 type jsDB struct {
@@ -121,6 +179,10 @@ func (jd *jsDB) Begin() (*jsTx, error) {
 	return &jsTx{tx: tx, ctx: jd.ctx, isReadOnly: jd.isReadOnly}, nil
 }
 
+// Metadata
+func (jd *jsDB) InKeys(numArgs int) string { return jd.db.InKeys(numArgs) }
+func (jd *jsDB) Quote(text string) string  { return jd.db.Quote(text) }
+
 // jsTx wraps *Tx for JS environment
 type jsTx struct {
 	tx         *Tx
@@ -182,7 +244,3 @@ func (jt *jsTx) Commit() error {
 }
 
 func (jt *jsTx) Rollback() error { return jt.tx.Rollback() }
-
-// Metadata
-func (jd *jsDB) InKeys(numArgs int) string { return jd.db.InKeys(numArgs) }
-func (jd *jsDB) Quote(text string) string  { return jd.db.Quote(text) }
