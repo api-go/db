@@ -32,7 +32,7 @@ func init() {
 				} else {
 					// 2. 远程数据库前缀校验
 					var allowedDSNs []string
-					cast.Convert(&allowedDSNs, ctx.Value("AllowedDSNs"))
+					cast.Convert(&allowedDSNs, jsmod.Get(ctx, "AllowedDSNs"))
 					matched := false
 					for _, prefix := range allowedDSNs {
 						if strings.HasPrefix(name, prefix) {
