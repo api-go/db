@@ -10,9 +10,9 @@ require (
 	apigo.cc/go/id v1.5.4
 	apigo.cc/go/jsmod v1.5.3
 	apigo.cc/go/log v1.5.8
-	apigo.cc/go/redis v1.5.6
+	apigo.cc/go/redis v1.5.7
 	apigo.cc/go/safe v1.5.2
-	apigo.cc/go/shell v1.5.3
+	apigo.cc/go/shell v1.5.4
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/mitchellh/mapstructure v1.5.0
