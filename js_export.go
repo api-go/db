@@ -13,65 +13,107 @@ import (
 func init() {
 	jsmod.Register("db", map[string]any{
 		// 入口：支持别名获取，不传则默认 "default"
-		"Get": func(ctx context.Context, name *string) (*jsDB, error) {
-			target := "default"
-			if name != nil {
-				target = *name
-			}
-			return getJSDB(ctx, target)
-		},
-
-		// 默认快捷调用 (面向 "default" 实例)
-		"Query": func(ctx context.Context, query string, args ...any) (*QueryResult, error) {
-			jd, err := getJSDB(ctx, "default")
-			if err != nil {
-				return nil, err
-			}
-			return jd.Query(query, args...), nil
-		},
-		"Exec": func(ctx context.Context, query string, args ...any) (*ExecResult, error) {
-			jd, err := getJSDB(ctx, "default")
-			if err != nil {
-				return nil, err
-			}
-			return jd.Exec(query, args...), nil
-		},
-		"Insert": func(ctx context.Context, table string, data any) (*ExecResult, error) {
-			jd, err := getJSDB(ctx, "default")
-			if err != nil {
-				return nil, err
-			}
-			return jd.Insert(table, data), nil
-		},
-		"Update": func(ctx context.Context, table string, data any, conditions string, args ...any) (*ExecResult, error) {
-			jd, err := getJSDB(ctx, "default")
-			if err != nil {
-				return nil, err
-			}
-			return jd.Update(table, data, conditions, args...), nil
-		},
-		"Delete": func(ctx context.Context, table string, conditions string, args ...any) (*ExecResult, error) {
-			jd, err := getJSDB(ctx, "default")
-			if err != nil {
-				return nil, err
-			}
-			return jd.Delete(table, conditions, args...), nil
-		},
-		"Replace": func(ctx context.Context, table string, data any) (*ExecResult, error) {
-			jd, err := getJSDB(ctx, "default")
-			if err != nil {
-				return nil, err
-			}
-			return jd.Replace(table, data), nil
-		},
-		"Begin": func(ctx context.Context) (*jsTx, error) {
-			jd, err := getJSDB(ctx, "default")
-			if err != nil {
-				return nil, err
-			}
-			return jd.Begin()
-		},
+		"Get":     jsGet,
+		"Query":   jsQuery,
+		"Exec":    jsExec,
+		"Insert":  jsInsert,
+		"Update":  jsUpdate,
+		"Delete":  jsDelete,
+		"Replace": jsReplace,
+		"Begin":   jsBegin,
 	})
+}
+
+func jsGet(ctx context.Context, name *string) (*jsDB, error) {
+	target := "default"
+	if name != nil {
+		target = *name
+	}
+	db, err := getJSDB(ctx, target)
+	if err != nil {
+		return nil, jsmod.MakeError(err)
+	}
+	return db, nil
+}
+
+func jsQuery(ctx context.Context, query string, args ...any) (*QueryResult, error) {
+	jd, err := getJSDB(ctx, "default")
+	if err != nil {
+		return nil, jsmod.MakeError(err)
+	}
+	res := jd.Query(query, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res, nil
+}
+
+func jsExec(ctx context.Context, query string, args ...any) (*ExecResult, error) {
+	jd, err := getJSDB(ctx, "default")
+	if err != nil {
+		return nil, jsmod.MakeError(err)
+	}
+	res := jd.Exec(query, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res, nil
+}
+
+func jsInsert(ctx context.Context, table string, data any) (*ExecResult, error) {
+	jd, err := getJSDB(ctx, "default")
+	if err != nil {
+		return nil, jsmod.MakeError(err)
+	}
+	res := jd.Insert(table, data)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res, nil
+}
+
+func jsUpdate(ctx context.Context, table string, data any, conditions string, args ...any) (*ExecResult, error) {
+	jd, err := getJSDB(ctx, "default")
+	if err != nil {
+		return nil, jsmod.MakeError(err)
+	}
+	res := jd.Update(table, data, conditions, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res, nil
+}
+
+func jsDelete(ctx context.Context, table string, conditions string, args ...any) (*ExecResult, error) {
+	jd, err := getJSDB(ctx, "default")
+	if err != nil {
+		return nil, jsmod.MakeError(err)
+	}
+	res := jd.Delete(table, conditions, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res, nil
+}
+
+func jsReplace(ctx context.Context, table string, data any) (*ExecResult, error) {
+	jd, err := getJSDB(ctx, "default")
+	if err != nil {
+		return nil, jsmod.MakeError(err)
+	}
+	res := jd.Replace(table, data)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res, nil
+}
+
+func jsBegin(ctx context.Context) (*jsTx, error) {
+	jd, err := getJSDB(ctx, "default")
+	if err != nil {
+		return nil, jsmod.MakeError(err)
+	}
+	return jd.Begin()
 }
 
 func getJSDB(ctx context.Context, name string) (*jsDB, error) {
@@ -87,7 +129,7 @@ func getJSDB(ctx context.Context, name string) (*jsDB, error) {
 			}
 			_, err := file.VerifyPathForSafeMode(ctx, path)
 			if err != nil {
-				return nil, err
+				return nil, jsmod.MakeError(err)
 			}
 			isReadOnly = false
 		} else {
@@ -109,7 +151,7 @@ func getJSDB(ctx context.Context, name string) (*jsDB, error) {
 
 	d := GetDB(name, nil)
 	if d.Error != nil {
-		return nil, d.Error
+		return nil, jsmod.MakeError(d.Error)
 	}
 	return &jsDB{db: d, ctx: ctx, isReadOnly: isReadOnly}, nil
 }
@@ -131,50 +173,74 @@ func (jd *jsDB) checkWrite() error {
 
 // Read Operations
 func (jd *jsDB) Query(query string, args ...any) *QueryResult {
-	return jd.db.Query(query, args...)
+	res := jd.db.Query(query, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 // Write Operations
 func (jd *jsDB) Exec(query string, args ...any) *ExecResult {
 	if err := jd.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jd.db.Exec(query, args...)
+	res := jd.db.Exec(query, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jd *jsDB) Insert(table string, data any) *ExecResult {
 	if err := jd.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jd.db.Insert(table, data)
+	res := jd.db.Insert(table, data)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jd *jsDB) Update(table string, data any, conditions string, args ...any) *ExecResult {
 	if err := jd.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jd.db.Update(table, data, conditions, args...)
+	res := jd.db.Update(table, data, conditions, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jd *jsDB) Delete(table string, conditions string, args ...any) *ExecResult {
 	if err := jd.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jd.db.Delete(table, conditions, args...)
+	res := jd.db.Delete(table, conditions, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jd *jsDB) Replace(table string, data any) *ExecResult {
 	if err := jd.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jd.db.Replace(table, data)
+	res := jd.db.Replace(table, data)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 // Transaction Support
 func (jd *jsDB) Begin() (*jsTx, error) {
 	tx := jd.db.Begin()
 	if tx.Error != nil {
-		return nil, tx.Error
+		return nil, jsmod.MakeError(tx.Error)
 	}
 	return &jsTx{tx: tx, ctx: jd.ctx, isReadOnly: jd.isReadOnly}, nil
 }
@@ -198,49 +264,81 @@ func (jt *jsTx) checkWrite() error {
 }
 
 func (jt *jsTx) Query(query string, args ...any) *QueryResult {
-	return jt.tx.Query(query, args...)
+	res := jt.tx.Query(query, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jt *jsTx) Exec(query string, args ...any) *ExecResult {
 	if err := jt.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jt.tx.Exec(query, args...)
+	res := jt.tx.Exec(query, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jt *jsTx) Insert(table string, data any) *ExecResult {
 	if err := jt.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jt.tx.Insert(table, data)
+	res := jt.tx.Insert(table, data)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jt *jsTx) Update(table string, data any, conditions string, args ...any) *ExecResult {
 	if err := jt.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jt.tx.Update(table, data, conditions, args...)
+	res := jt.tx.Update(table, data, conditions, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jt *jsTx) Delete(table string, conditions string, args ...any) *ExecResult {
 	if err := jt.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jt.tx.Delete(table, conditions, args...)
+	res := jt.tx.Delete(table, conditions, args...)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jt *jsTx) Replace(table string, data any) *ExecResult {
 	if err := jt.checkWrite(); err != nil {
-		return &ExecResult{Error: err}
+		return &ExecResult{Error: jsmod.MakeError(err)}
 	}
-	return jt.tx.Replace(table, data)
+	res := jt.tx.Replace(table, data)
+	if res != nil && res.Error != nil {
+		res.Error = jsmod.MakeError(res.Error)
+	}
+	return res
 }
 
 func (jt *jsTx) Commit() error {
 	if err := jt.checkWrite(); err != nil {
-		return err
+		return jsmod.MakeError(err)
 	}
-	return jt.tx.Commit()
+	if err := jt.tx.Commit(); err != nil {
+		return jsmod.MakeError(err)
+	}
+	return nil
 }
 
-func (jt *jsTx) Rollback() error { return jt.tx.Rollback() }
+func (jt *jsTx) Rollback() error {
+	if err := jt.tx.Rollback(); err != nil {
+		return jsmod.MakeError(err)
+	}
+	return nil
+}
