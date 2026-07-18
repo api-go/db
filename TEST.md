@@ -1,12 +1,17 @@
 # @go/db 测试报告
 
+## v1.5.9 验证
+- `go list -m all`：模块图使用 `redis v1.5.11` 与稳定版 `redigo v1.9.3`。
+- `go test -v ./...`：通过完整测试。
+- `go test -bench=. ./...`：通过完整基准测试。
+
 ## 📊 概览
 - **模块**: `apigo.cc/go/db`
 - **总测试用例**: 13
 - **通过**: 13
 - **失败**: 0
 - **编译状态**: 成功 (Success)
-- **测试日期**: 2026-06-21
+- **测试日期**: 2026-07-18
 
 ## ✅ 详细详情
 | 测试用例 | 状态 | 耗时 | 备注 |
@@ -27,10 +32,10 @@
 ## 🚀 性能基准 (Benchmarks)
 | 基准测试 | 迭代次数 | 耗时 | 内存分配 | 备注 |
 | :--- | :--- | :--- | :--- | :--- |
-| `BenchmarkForPool` | 106807 | 12230 ns/op | - | 验证 SQLite 下的查询绑定性能 (v1.0.11) |
-| `BenchmarkForPoolParallel` | 86833 | 15723 ns/op | - | 验证高并发下的查询稳定性 (v1.0.11) |
+| `BenchmarkForPool` | 245385 | 4866 ns/op | - | 验证 SQLite 下的查询绑定性能 (v1.5.9) |
+| `BenchmarkForPoolParallel` | 136383 | 8838 ns/op | - | 验证高并发下的查询稳定性 (v1.5.9) |
 
 ## 🛠 环境
 - **OS**: darwin (macOS)
-- **Go Version**: 1.25.0
+- **Go Version**: 1.26.4
 - **Primary Driver**: modernc.org/sqlite

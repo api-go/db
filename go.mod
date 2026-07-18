@@ -3,14 +3,14 @@ module apigo.cc/go/db
 go 1.25.0
 
 require (
-	apigo.cc/go/cast v1.5.3
+	apigo.cc/go/cast v1.5.4
 	apigo.cc/go/config v1.5.3
-	apigo.cc/go/crypto v1.5.3
+	apigo.cc/go/crypto v1.5.4
 	apigo.cc/go/file v1.5.5
-	apigo.cc/go/id v1.5.4
+	apigo.cc/go/id v1.5.6
 	apigo.cc/go/jsmod v1.5.3
 	apigo.cc/go/log v1.5.8
-	apigo.cc/go/redis v1.5.7
+	apigo.cc/go/redis v1.5.11
 	apigo.cc/go/safe v1.5.2
 	apigo.cc/go/shell v1.5.4
 	github.com/go-sql-driver/mysql v1.10.0
@@ -20,11 +20,11 @@ require (
 )
 
 require (
-	apigo.cc/go/encoding v1.5.4 // indirect
+	apigo.cc/go/encoding v1.5.5 // indirect
 	apigo.cc/go/rand v1.5.3 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/gomodule/redigo v2.0.0+incompatible // indirect
+	github.com/gomodule/redigo v1.9.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
