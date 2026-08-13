@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"apigo.cc/go/cast"
@@ -19,6 +20,39 @@ type SchemaGroup struct {
 var fieldSpliter = regexp.MustCompile(`\s+`)
 var wnMatcher = regexp.MustCompile(`^([a-zA-Z]+)([0-9]+)$`)
 
+func splitSchemaField(line string) []string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil
+	}
+	if line[0] != '"' {
+		return fieldSpliter.Split(line, 10)
+	}
+	for i, escaped := 1, false; i < len(line); i++ {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if line[i] == '\\' {
+			escaped = true
+			continue
+		}
+		if line[i] == '"' {
+			name, err := strconv.Unquote(line[:i+1])
+			if err != nil {
+				return fieldSpliter.Split(line, 10)
+			}
+			rest := strings.TrimSpace(line[i+1:])
+			parts := []string{name}
+			if rest != "" {
+				parts = append(parts, fieldSpliter.Split(rest, 9)...)
+			}
+			return parts
+		}
+	}
+	return fieldSpliter.Split(line, 10)
+}
+
 // ParseField 解析单行字段描述
 func ParseField(line string) TableField {
 	lc := strings.SplitN(line, "//", 2)
@@ -28,7 +62,7 @@ func ParseField(line string) TableField {
 		comment = strings.TrimSpace(lc[1])
 	}
 
-	a := fieldSpliter.Split(line, 10)
+	a := splitSchemaField(line)
 	field := TableField{
 		Name:       a[0],
 		Type:       "",
@@ -308,8 +342,6 @@ func (db *DB) Sync(desc string) error {
 	}
 	return outErr
 }
-
-
 
 // CheckTable 检查并同步单个表结构
 func (db *DB) CheckTable(table *TableStruct) error {
@@ -730,44 +762,44 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			return res.Error
 		}
 		_ = tx.Commit()
-		}
+	}
 
-		if len(ftsFields) > 0 && strings.HasPrefix(db.Config.Type, "sqlite") {
-			ftsTableName := table.Name + "_fts"
-			ftsInfo := db.Query("SELECT \"name\" FROM \"sqlite_master\" WHERE \"type\"='table' AND \"name\"='" + ftsTableName + "'").MapOnR1()
-			if ftsInfo["name"] == nil {
-				// 创建 FTS 虚拟表
-				db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE \"%s\" USING fts5(%s, tokenize='unicode61')", ftsTableName, strings.Join(ftsFields, ", ")))
+	if len(ftsFields) > 0 && strings.HasPrefix(db.Config.Type, "sqlite") {
+		ftsTableName := table.Name + "_fts"
+		ftsInfo := db.Query("SELECT \"name\" FROM \"sqlite_master\" WHERE \"type\"='table' AND \"name\"='" + ftsTableName + "'").MapOnR1()
+		if ftsInfo["name"] == nil {
+			// 创建 FTS 虚拟表
+			db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE \"%s\" USING fts5(%s, tokenize='unicode61')", ftsTableName, strings.Join(ftsFields, ", ")))
 
-				idField := "id"
-				if len(pks) > 0 {
-					idField = pks[0]
-				}
-
-				// AI Trigger
-				newFtsFields := make([]string, 0, len(ftsFields))
-				for _, f := range ftsFields {
-					newFtsFields = append(newFtsFields, "new."+f)
-				}
-				aiSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ai\" AFTER INSERT ON \"%s\" BEGIN INSERT INTO \"%s\"(rowid, %s) VALUES (new.%s, %s); END;",
-					ftsTableName, table.Name, ftsTableName, strings.Join(ftsFields, ", "), idField, strings.Join(newFtsFields, ", "))
-				db.Exec(aiSql)
-
-				// AD Trigger
-				adSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ad\" AFTER DELETE ON \"%s\" BEGIN DELETE FROM \"%s\" WHERE rowid = old.%s; END;",
-					ftsTableName, table.Name, ftsTableName, idField)
-				db.Exec(adSql)
-
-				// AU Trigger
-				updateSets := make([]string, 0, len(ftsFields))
-				for _, f := range ftsFields {
-					updateSets = append(updateSets, fmt.Sprintf("%s = new.%s", f, f))
-				}
-				auSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_au\" AFTER UPDATE ON \"%s\" BEGIN UPDATE \"%s\" SET %s WHERE rowid = old.%s; END;",
-					ftsTableName, table.Name, ftsTableName, strings.Join(updateSets, ", "), idField)
-				db.Exec(auSql)
+			idField := "id"
+			if len(pks) > 0 {
+				idField = pks[0]
 			}
+
+			// AI Trigger
+			newFtsFields := make([]string, 0, len(ftsFields))
+			for _, f := range ftsFields {
+				newFtsFields = append(newFtsFields, "new."+f)
+			}
+			aiSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ai\" AFTER INSERT ON \"%s\" BEGIN INSERT INTO \"%s\"(rowid, %s) VALUES (new.%s, %s); END;",
+				ftsTableName, table.Name, ftsTableName, strings.Join(ftsFields, ", "), idField, strings.Join(newFtsFields, ", "))
+			db.Exec(aiSql)
+
+			// AD Trigger
+			adSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ad\" AFTER DELETE ON \"%s\" BEGIN DELETE FROM \"%s\" WHERE rowid = old.%s; END;",
+				ftsTableName, table.Name, ftsTableName, idField)
+			db.Exec(adSql)
+
+			// AU Trigger
+			updateSets := make([]string, 0, len(ftsFields))
+			for _, f := range ftsFields {
+				updateSets = append(updateSets, fmt.Sprintf("%s = new.%s", f, f))
+			}
+			auSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_au\" AFTER UPDATE ON \"%s\" BEGIN UPDATE \"%s\" SET %s WHERE rowid = old.%s; END;",
+				ftsTableName, table.Name, ftsTableName, strings.Join(updateSets, ", "), idField)
+			db.Exec(auSql)
 		}
+	}
 SYNC_SHADOW:
 	if table.ShadowDelete && !strings.HasSuffix(table.Name, "_deleted") {
 		table.HasShadowTable = true

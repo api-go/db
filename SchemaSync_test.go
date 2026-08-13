@@ -8,6 +8,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func TestParseFieldQuotedName(t *testing.T) {
+	field := db.ParseField(`"Display Name 中文" v255 I // label`)
+	if field.Name != "Display Name 中文" || field.Type != "varchar(255)" || field.Index != "index" || field.Comment != "label" {
+		t.Fatalf("unexpected quoted field: %#v", field)
+	}
+}
+
 func TestSchemaSync(t *testing.T) {
 	dbPath := "test_schema.db"
 	dbInst := db.GetDB("sqlite://"+dbPath, nil)
@@ -57,4 +64,3 @@ func TestAutoDetectShadow(t *testing.T) {
 		t.Fatal("Auto-detect shadow delete failed")
 	}
 }
-
