@@ -581,6 +581,9 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		for keyId := range oldIndexes {
 			if keyId != "PRIMARY" && !isPostgres && strings.ToLower(keySetFields[keyId]) != strings.ToLower(oldIndexes[keyId]) {
 				if strings.HasPrefix(db.Config.Type, "sqlite") {
+					if table.Name == "_Table" || table.Name == "_Field" {
+						continue
+					}
 					if strings.HasPrefix(keyId, "sqlite_autoindex_") {
 						continue
 					}
@@ -646,7 +649,12 @@ func (db *DB) CheckTable(table *TableStruct) error {
 
 		for oldFieldName := range oldFields {
 			if !newFieldExists[oldFieldName] {
-				if !strings.HasPrefix(db.Config.Type, "sqlite") && !isPostgres {
+				if strings.HasPrefix(db.Config.Type, "sqlite") {
+					if table.Name == "_Table" || table.Name == "_Field" {
+						continue
+					}
+					actions = append(actions, "ALTER TABLE "+db.Quote(table.Name)+" DROP COLUMN "+db.Quote(oldFieldName))
+				} else if !isPostgres {
 					actions = append(actions, "DROP COLUMN "+db.Quote(oldFieldName))
 				}
 			}

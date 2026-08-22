@@ -1,5 +1,9 @@
 # @go/db 测试报告
 
+## v1.5.11 验证
+- `TestSchemaSync` 覆盖 SQLite 主表与影子删除表的字段移除。
+- `go test -v ./...` 与 `go test -bench=. ./...` 通过。
+
 ## v1.5.9 验证
 - `go list -m all`：模块图使用 `redis v1.5.11` 与稳定版 `redigo v1.9.3`。
 - `go test -v ./...`：通过完整测试。

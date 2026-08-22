@@ -42,6 +42,24 @@ test_table SD // Test table with shadow delete
 	if res.IntOnR1C1() != 1 {
 		t.Fatal("Shadow delete failed")
 	}
+
+	withoutStatus := `== Default ==
+test_table SD // Test table with shadow delete
+  id AI // ID
+  name v50 U
+  autoVersion ubi // Version
+`
+	if err := dbInst.Sync(withoutStatus); err != nil {
+		t.Fatal("Sync removed field:", err)
+	}
+	for _, tableName := range []string{"test_table", "test_table_deleted"} {
+		fields := dbInst.Query("PRAGMA table_info(" + dbInst.Quote(tableName) + ")").MapResults()
+		for _, field := range fields {
+			if field["name"] == "status" {
+				t.Fatalf("removed field remains in physical table %s", tableName)
+			}
+		}
+	}
 }
 
 func TestAutoDetectShadow(t *testing.T) {
