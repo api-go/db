@@ -1,5 +1,10 @@
 # @go/db 测试报告
 
+## v1.5.12 验证
+- `TestParseFullTextIndexGroup` 覆盖 Schema DSL 中 `TI<n>` 全文索引分组解析。
+- `go test -v ./...` 与 `go test -bench=. ./...` 作为发布前完整验证执行。
+- `git diff --check` 通过。
+
 ## v1.5.11 验证
 - `TestSchemaSync` 覆盖 SQLite 主表与影子删除表的字段移除。
 - `go test -v ./...` 与 `go test -bench=. ./...` 通过。

@@ -15,6 +15,13 @@ func TestParseFieldQuotedName(t *testing.T) {
 	}
 }
 
+func TestParseFullTextIndexGroup(t *testing.T) {
+	field := db.ParseField(`content t TI7`)
+	if field.Index != "fulltext" || field.IndexGroup != "7" {
+		t.Fatalf("unexpected fulltext index group: %#v", field)
+	}
+}
+
 func TestSchemaSync(t *testing.T) {
 	dbPath := "test_schema.db"
 	dbInst := db.GetDB("sqlite://"+dbPath, nil)

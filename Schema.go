@@ -172,6 +172,9 @@ func ParseField(line string) TableField {
 			case "U":
 				field.Index = "unique"
 				field.IndexGroup = cast.String(size)
+			case "TI":
+				field.Index = "fulltext"
+				field.IndexGroup = cast.String(size)
 			default:
 				if !field.IsVersion {
 					field.Type += fmt.Sprintf("(%d)", size)
