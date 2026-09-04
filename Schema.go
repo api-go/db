@@ -62,7 +62,10 @@ func ParseField(line string) TableField {
 		comment = strings.TrimSpace(lc[1])
 	}
 
-	a := splitSchemaField(line)
+	a := canonicalFieldParts(splitSchemaField(line))
+	if err := validateSchemaField(a); err != nil {
+		return TableField{parseError: err}
+	}
 	field := TableField{
 		Name:       a[0],
 		Type:       "",
@@ -166,15 +169,8 @@ func ParseField(line string) TableField {
 
 		if size > 0 {
 			switch tag {
-			case "I":
-				field.Index = "index"
-				field.IndexGroup = cast.String(size)
-			case "U":
-				field.Index = "unique"
-				field.IndexGroup = cast.String(size)
-			case "TI":
-				field.Index = "fulltext"
-				field.IndexGroup = cast.String(size)
+			case "I", "U", "TI":
+				field.parseError = fmt.Errorf("numeric index groups are not supported; declare a table-level index")
 			default:
 				if !field.IsVersion {
 					field.Type += fmt.Sprintf("(%d)", size)
@@ -237,6 +233,14 @@ func ParseSchema(desc string) []*SchemaGroup {
 			}
 			currentGroup.Tables = append(currentGroup.Tables, currentTable)
 		} else if currentTable != nil {
+			if index, matched, err := parseTableIndex(trimmedLine); matched {
+				if err != nil {
+					currentTable.indexError = err
+				} else {
+					currentTable.Indexes = append(currentTable.Indexes, index)
+				}
+				continue
+			}
 			field := ParseField(trimmedLine)
 			if field.IsVersion {
 				currentTable.VersionField = field.Name
@@ -329,6 +333,14 @@ func (field *TableField) Parse(tableType string) {
 // Sync 根据 Schema 描述文本同步数据库结构
 func (db *DB) Sync(desc string) error {
 	groups := ParseSchema(desc)
+	// Validate every table before changing any physical schema.
+	for _, group := range groups {
+		for _, table := range group.Tables {
+			if err := table.prepareIndexes(); err != nil {
+				return err
+			}
+		}
+	}
 	var outErr error
 	for _, group := range groups {
 		for _, table := range group.Tables {
@@ -348,6 +360,9 @@ func (db *DB) Sync(desc string) error {
 
 // CheckTable 检查并同步单个表结构
 func (db *DB) CheckTable(table *TableStruct) error {
+	if err := table.prepareIndexes(); err != nil {
+		return err
+	}
 	fieldSets := make([]string, 0)
 	pks := make([]string, 0)
 	keySets := make([]string, 0)
@@ -390,7 +405,20 @@ func (db *DB) CheckTable(table *TableStruct) error {
 	// 阶段二：生成字段定义与索引定义
 	processedGroups := make(map[string]bool)
 
-	for _, field := range table.Fields {
+	indexFields := append([]TableField{}, table.Fields...)
+	for i, index := range table.Indexes {
+		kind := map[string]string{"I": "index", "U": "unique", "TI": "fulltext"}[strings.ToUpper(index.Type)]
+		group := fmt.Sprintf("@table_%d", i)
+		columns := append([]string{}, index.Fields...)
+		if kind == "fulltext" {
+			for j := range columns {
+				columns[j] += "_tokens"
+			}
+		}
+		indexGroups[kind+"_"+group] = &indexGroupDef{Type: kind, Fields: columns}
+		indexFields = append(indexFields, TableField{Index: kind, IndexGroup: group})
+	}
+	for _, field := range indexFields {
 		idxType := strings.ToLower(field.Index)
 		if idxType == "unique" || idxType == "index" || idxType == "fulltext" {
 			group := field.IndexGroup
@@ -412,6 +440,12 @@ func (db *DB) CheckTable(table *TableStruct) error {
 					prefix = "tk"
 				}
 				keyName := fmt.Sprintf("%s_%s_%s", prefix, table.Name, joinedFields)
+				if strings.HasPrefix(group, "@table_") {
+					// Include boundaries and directions; a_b,c must not collide
+					// with a,b_c, nor ASC with DESC or another index type.
+					hash := md5.Sum([]byte(idxType + "\x00" + strings.Join(groupDef.Fields, "\x00")))
+					keyName = fmt.Sprintf("%s_%s_%s", prefix, table.Name, hex.EncodeToString(hash[:])[:16])
+				}
 
 				// 防超长截断处理 (最大 64，留 4 个给安全余量，设为 60)
 				if len(keyName) > 60 {
@@ -429,7 +463,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 						// PostgreSQL 使用 simple 分词器
 						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" USING GIN (to_tsvector('simple', \"%s\"))", keyName, table.Name, groupDef.Fields[0])
 					} else if !strings.HasPrefix(db.Config.Type, "sqlite") && db.Config.Type != "chai" {
-						keySet = fmt.Sprintf("FULLTEXT KEY "+db.Quote("%s")+" ("+db.Quotes(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
+						keySet = fmt.Sprintf("FULLTEXT KEY "+db.Quote("%s")+" ("+db.indexColumns(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
 					}
 					if keySet != "" {
 						keySets = append(keySets, keySet)
@@ -438,29 +472,31 @@ func (db *DB) CheckTable(table *TableStruct) error {
 				} else if idxType == "unique" {
 					keySet := ""
 					if strings.HasPrefix(db.Config.Type, "sqlite") || db.Config.Type == "chai" {
-						keySet = fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.Quotes(groupDef.Fields))
+						keySet = fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.indexColumns(groupDef.Fields))
 					} else if isPostgres {
-						keySet = fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.Quotes(groupDef.Fields))
+						keySet = fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.indexColumns(groupDef.Fields))
 					} else {
-						keySet = fmt.Sprintf("UNIQUE KEY "+db.Quote("%s")+" ("+db.Quotes(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
+						keySet = fmt.Sprintf("UNIQUE KEY "+db.Quote("%s")+" ("+db.indexColumns(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
 					}
 					keySets = append(keySets, keySet)
 					keySetBy[keyName] = keySet
 				} else { // index
 					keySet := ""
 					if strings.HasPrefix(db.Config.Type, "sqlite") || db.Config.Type == "chai" {
-						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.Quotes(groupDef.Fields))
+						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.indexColumns(groupDef.Fields))
 					} else if isPostgres {
-						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.Quotes(groupDef.Fields))
+						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.indexColumns(groupDef.Fields))
 					} else {
-						keySet = fmt.Sprintf("KEY "+db.Quote("%s")+" ("+db.Quotes(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
+						keySet = fmt.Sprintf("KEY "+db.Quote("%s")+" ("+db.indexColumns(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
 					}
 					keySets = append(keySets, keySet)
 					keySetBy[keyName] = keySet
 				}
 			}
 		}
-		fieldSets = append(fieldSets, field.Desc)
+		if field.Name != "" {
+			fieldSets = append(fieldSets, field.Desc)
+		}
 	}
 
 	var tableInfo map[string]any
@@ -517,11 +553,19 @@ func (db *DB) CheckTable(table *TableStruct) error {
 					Name  string
 					Seqno int
 					Cid   int
+					Desc  int
+					Key   int
 				}{}
-				if err := db.Query("PRAGMA index_info(" + db.Quote(i.Name) + ")").To(&tmpIndexInfo); err != nil {
+				if err := db.Query("PRAGMA index_xinfo(" + db.Quote(i.Name) + ")").To(&tmpIndexInfo); err != nil {
 					return err
 				}
 				for _, ii := range tmpIndexInfo {
+					if ii.Key == 0 {
+						continue
+					}
+					if ii.Desc == 1 {
+						ii.Name = "-" + ii.Name
+					}
 					oldIndexInfos = append(oldIndexInfos, &tableKeyDesc{
 						Key_name:    i.Name,
 						Column_name: ii.Name,
@@ -705,8 +749,11 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			goto SYNC_SHADOW
 		}
 
-		tx := db.Begin()
-		defer tx.CheckFinished()
+		tx := db.schemaTx
+		if tx == nil {
+			tx = db.Begin()
+			defer tx.CheckFinished()
+		}
 		var res *ExecResult
 		if strings.HasPrefix(db.Config.Type, "sqlite") || isPostgres {
 			for _, action := range actions {
@@ -721,10 +768,16 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		}
 
 		if res != nil && res.Error != nil {
-			_ = tx.Rollback()
+			if db.schemaTx == nil {
+				_ = tx.Rollback()
+			}
 			return res.Error
 		}
-		_ = tx.Commit()
+		if db.schemaTx == nil {
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+		}
 	} else {
 		// 创建新表
 		if len(pks) > 0 {
@@ -754,8 +807,11 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			sql = fmt.Sprintf("CREATE TABLE `%s` (\n%s\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='%s';", table.Name, strings.Join(fieldSets, ",\n"), table.Comment)
 		}
 
-		tx := db.Begin()
-		defer tx.CheckFinished()
+		tx := db.schemaTx
+		if tx == nil {
+			tx = db.Begin()
+			defer tx.CheckFinished()
+		}
 		res := tx.Exec(sql)
 
 		if res.Error == nil && (strings.HasPrefix(db.Config.Type, "sqlite") || isPostgres) {
@@ -769,10 +825,16 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		}
 
 		if res != nil && res.Error != nil {
-			_ = tx.Rollback()
+			if db.schemaTx == nil {
+				_ = tx.Rollback()
+			}
 			return res.Error
 		}
-		_ = tx.Commit()
+		if db.schemaTx == nil {
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+		}
 	}
 
 	if len(ftsFields) > 0 && strings.HasPrefix(db.Config.Type, "sqlite") {
@@ -780,7 +842,9 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		ftsInfo := db.Query("SELECT \"name\" FROM \"sqlite_master\" WHERE \"type\"='table' AND \"name\"='" + ftsTableName + "'").MapOnR1()
 		if ftsInfo["name"] == nil {
 			// 创建 FTS 虚拟表
-			db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE \"%s\" USING fts5(%s, tokenize='unicode61')", ftsTableName, strings.Join(ftsFields, ", ")))
+			if res := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE \"%s\" USING fts5(%s, tokenize='unicode61')", ftsTableName, strings.Join(ftsFields, ", "))); res.Error != nil {
+				return res.Error
+			}
 
 			idField := "id"
 			if len(pks) > 0 {
@@ -794,12 +858,16 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			}
 			aiSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ai\" AFTER INSERT ON \"%s\" BEGIN INSERT INTO \"%s\"(rowid, %s) VALUES (new.%s, %s); END;",
 				ftsTableName, table.Name, ftsTableName, strings.Join(ftsFields, ", "), idField, strings.Join(newFtsFields, ", "))
-			db.Exec(aiSql)
+			if res := db.Exec(aiSql); res.Error != nil {
+				return res.Error
+			}
 
 			// AD Trigger
 			adSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ad\" AFTER DELETE ON \"%s\" BEGIN DELETE FROM \"%s\" WHERE rowid = old.%s; END;",
 				ftsTableName, table.Name, ftsTableName, idField)
-			db.Exec(adSql)
+			if res := db.Exec(adSql); res.Error != nil {
+				return res.Error
+			}
 
 			// AU Trigger
 			updateSets := make([]string, 0, len(ftsFields))
@@ -808,7 +876,9 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			}
 			auSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_au\" AFTER UPDATE ON \"%s\" BEGIN UPDATE \"%s\" SET %s WHERE rowid = old.%s; END;",
 				ftsTableName, table.Name, ftsTableName, strings.Join(updateSets, ", "), idField)
-			db.Exec(auSql)
+			if res := db.Exec(auSql); res.Error != nil {
+				return res.Error
+			}
 		}
 	}
 SYNC_SHADOW:
@@ -817,6 +887,7 @@ SYNC_SHADOW:
 		shadowTable := *table
 		shadowTable.Name = table.Name + "_deleted"
 		shadowTable.ShadowDelete = false
+		shadowTable.Indexes = nil
 		shadowTable.Fields = make([]TableField, 0, len(table.Fields)+1)
 		for _, f := range table.Fields {
 			f.Index = ""

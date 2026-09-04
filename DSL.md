@@ -24,12 +24,12 @@ users SD // 系统用户表
 格式：`[名称] [类型标记][长度] [索引标记] // [注释]`
 
 ```
-  id AI // 主键，自动递增
+  id i AI // 主键，自动递增
   username v32 U // Varchar(32)，唯一索引
   password v64 // Varchar(64)
   version ver // Bigint 版本号，用于乐观锁和增量同步
-  create_time ct // 创建时间 (CURRENT_TIMESTAMP)
-  update_time ctu // 更新时间 (ON UPDATE CURRENT_TIMESTAMP)
+  create_time dt ct // 创建时间 (CURRENT_TIMESTAMP)
+  update_time dt ctu // 更新时间 (ON UPDATE CURRENT_TIMESTAMP)
 ```
 
 ## 类型标记 (Type Tags)
@@ -68,12 +68,26 @@ users SD // 系统用户表
 | `nn` | 非空 (NOT NULL) |
 | `n`  | 可为空 (NULL) |
 
-### 复合索引
-在 `I` 或 `U` 后添加数字可以将多个字段组合成一个复合索引。
+### 独立索引
+字段类型必须提供；字段后的 I/U/TI 仅用于单字段升序索引。独立索引行不写类型，只写有序字段清单和 I/U/TI；支持单字段。前缀 `-` 表示降序，其余为升序，不使用 ASC/DESC 关键字。
+
 ```
-  first_name v32 I1
-  last_name v32 I1 // 在 (first_name, last_name) 上创建复合索引 'ik_table_1'
+users
+  id c12 PK
+  username v32
+  email v64
+  status ti I
+  updated_at bi
+  username,email U
+  email,username I
+  status,-updated_at I
+  -updated_at I
+  username I
 ```
+
+名称由表名、类型及有序字段/方向自动生成。字段不存在、重复引用字段或全文索引指定降序时拒绝同步。Sync 在执行任何表的 DDL 前校验全部表；删除声明会移除对应索引。主键仍写在字段定义上。
+
+Go 入口为 `TableStruct.Indexes []TableIndex`，例如 `TableIndex{Type: "I", Fields: []string{"status", "-updated_at"}}`。旧数字分组仅在 TableDB 联动迁移期间暂留，不用于新定义。
 
 ## 高级特性
 
@@ -92,12 +106,12 @@ users SD // 系统用户表
 ```
 == 默认分组 ==
 users SD // 用户表
-  id AI // 用户 ID
+  id i AI // 用户 ID
   username v32 U // 登录名
   email v64 U // 联系邮箱
   password v128 // 加密后的密码
   status ti I // 0: 活跃, 1: 禁用
   version ver // 行版本号
-  created_at ct // 创建记录
-  updated_at ctu // 更新记录
+  created_at dt ct // 创建记录
+  updated_at dt ctu // 更新记录
 ```

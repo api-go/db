@@ -12,7 +12,7 @@
     - **智能删除**: 如果存在一个名为 `[表名]_deleted` 的表，`Delete` 操作将自动执行**影子删除**（将数据移入该表）；否则，执行物理删除。
 *   **全局版本号**：内置基于 Redis 的全局序列（自动降级为本地 Map），确保分布式环境下 `version` 绝对单调递增，为可靠的增量同步提供基础。
 *   **架构即代码 (DSL)**：`SD` 标记现在仅用于**建表**时自动创建 `_deleted` 表，而运行时的删除行为由约定决定。
-    - 索引标记支持 `I<n>`、`U<n>` 与 `TI<n>` 分组；相同分组号的字段组成普通、唯一或全文联合索引。
+    - 字段类型必填；独立索引使用 `a,b U`、`a,-b I`、`a I`，名称自动生成。字段上的 I/U/TI 创建单字段升序索引；数字分组待 TableDB 联动切换后移除。
 
 ## 📦 安装
 
@@ -66,7 +66,7 @@ id := res.Id()         // 获取自增 ID
 schema := `
 == Default ==
 users SD // 用户表，开启影子删除
-  id AI // 自增 ID
+  id i AI // 自增 ID
   name v50 U // 字符串(50)，唯一索引
   autoVersion ubi // 自动版本号
   status ti // 状态 (TinyInt)
@@ -76,6 +76,8 @@ dbInst.Sync(schema) // 自动创建 users 和 users_deleted 表及索引
 
 
 ### 4. 事务
+SQLite 的 `tx.Sync(schema)` 可将物理 Schema 修改与同事务的数据／元数据修改一起提交。出错后调用方必须回滚；底层 Schema 缓存仅在成功提交后失效。其他数据库暂不支持该事务内同步入口。
+
 ```go
 tx := dbInst.Begin()
 if tx.Error != nil { /* 处理错误 */ }

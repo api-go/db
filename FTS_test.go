@@ -18,10 +18,12 @@ func TestAutonomousFTS(t *testing.T) {
 
 	schema := `== Default ==
 fts_test
-  id AI
-  title TI // Fulltext title
-  content TI // Fulltext content
+  id i AI
+  title t // Fulltext title
+  content t // Fulltext content
   status i
+  title TI
+  content TI
 `
 	err := dbInst.Sync(schema)
 	if err != nil {

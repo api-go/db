@@ -1,7 +1,16 @@
 # @go/db 测试报告
 
+## 2026-09-04 Schema 事务
+- TestSchemaTransactionRollbackAndCommit 验证同行修改、列/索引/影子表结构的事务同步，失败回滚及成功提交；全量和定向 race 通过。
+
+## Unreleased 独立索引
+- TestStandaloneIndexes：SQLite AB/BA、混合方向、单列降序、唯一约束、重复同步、索引删除及影子表不继承约束。
+- TestStandaloneIndexValidationBeforeMutation：字段引用、重复列、无效标记、全文降序的拒绝；非法索引不能先添加字段。
+- 字段类型必须提供；全文用例显式定义 `title t` 并另写 `title TI`，验证独立全文声明，不再把 `title TI` 当字段定义。
+- 非 SQLite 实例的物理同步尚未实测；旧数字分组仍待上层迁移后移除，不能视为整个索引改造完成。
+
 ## v1.5.12 验证
-- `TestParseFullTextIndexGroup` 覆盖 Schema DSL 中 `TI<n>` 全文索引分组解析。
+- `TestNumericIndexGroupsAreRejected` 验证 Schema DSL 拒绝 `I<n>`/`U<n>`/`TI<n>` 旧数字分组，复合索引必须使用独立表级声明。
 - `go test -v ./...` 与 `go test -bench=. ./...` 作为发布前完整验证执行。
 - `git diff --check` 通过。
 

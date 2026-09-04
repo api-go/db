@@ -15,10 +15,10 @@ func TestParseFieldQuotedName(t *testing.T) {
 	}
 }
 
-func TestParseFullTextIndexGroup(t *testing.T) {
-	field := db.ParseField(`content t TI7`)
-	if field.Index != "fulltext" || field.IndexGroup != "7" {
-		t.Fatalf("unexpected fulltext index group: %#v", field)
+func TestNumericIndexGroupsAreRejected(t *testing.T) {
+	store := db.GetDB("sqlite://"+t.TempDir()+"/numeric-group.db", nil)
+	if err := store.Sync("records\n  id c10 PK\n  content t TI7\n"); err == nil {
+		t.Fatal("numeric index group must be rejected")
 	}
 }
 
@@ -31,7 +31,7 @@ func TestSchemaSync(t *testing.T) {
 
 	schema := `== Default ==
 test_table SD // Test table with shadow delete
-  id AI // ID
+  id i AI // ID
   name v50 U
   autoVersion ubi // Version
   status ti // Status
@@ -42,9 +42,7 @@ test_table SD // Test table with shadow delete
 	}
 
 	dbInst.Insert("test_table", map[string]any{"name": "test", "status": 1})
-
 	dbInst.Delete("test_table", "id=?", 1)
-
 	res := dbInst.Query("SELECT COUNT(*) FROM test_table_deleted")
 	if res.IntOnR1C1() != 1 {
 		t.Fatal("Shadow delete failed")
@@ -52,7 +50,7 @@ test_table SD // Test table with shadow delete
 
 	withoutStatus := `== Default ==
 test_table SD // Test table with shadow delete
-  id AI // ID
+  id i AI // ID
   name v50 U
   autoVersion ubi // Version
 `
@@ -76,14 +74,10 @@ func TestAutoDetectShadow(t *testing.T) {
 	defer dbInst.Exec("DROP TABLE IF EXISTS test_auto")
 	defer dbInst.Exec("DROP TABLE IF EXISTS test_auto_deleted")
 
-	// Manually create tables, DO NOT call Sync
 	dbInst.Exec("CREATE TABLE test_auto (id INTEGER PRIMARY KEY)")
 	dbInst.Exec("CREATE TABLE test_auto_deleted (id INTEGER PRIMARY KEY)")
 	dbInst.Insert("test_auto", map[string]any{"id": 1})
-
-	// This should trigger auto-detection and perform a shadow delete
 	dbInst.Delete("test_auto", "id=?", 1)
-
 	res := dbInst.Query("SELECT COUNT(*) FROM test_auto_deleted")
 	if res.IntOnR1C1() != 1 {
 		t.Fatal("Auto-detect shadow delete failed")

@@ -184,6 +184,7 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 }
 
 type DB struct {
+	schemaTx            *Tx // private transaction-bound schema runner
 	name                string
 	conn                *sql.DB
 	readonlyConnections []*sql.DB
@@ -198,6 +199,8 @@ type DB struct {
 
 type TableStruct struct {
 	Name           string
+	Indexes        []TableIndex
+	indexError     error
 	Comment        string
 	Fields         []TableField
 	Columns        []string
@@ -208,7 +211,15 @@ type TableStruct struct {
 	IdSize         int
 }
 
+// TableIndex defines an independently ordered index. A leading '-' on a field
+// selects descending order; names are generated from the complete definition.
+type TableIndex struct {
+	Type   string
+	Fields []string
+}
+
 type TableField struct {
+	parseError error
 	Name       string
 	Type       string
 	Index      string
@@ -732,6 +743,9 @@ func (db *DB) Begin() *Tx {
 }
 
 func (db *DB) Exec(query string, args ...any) *ExecResult {
+	if db.schemaTx != nil {
+		return db.schemaTx.Exec(query, args...)
+	}
 	query, args = db.rewriteFTS(query, args)
 	args = flatArgs(args)
 	db.lock()
@@ -753,6 +767,9 @@ func (db *DB) rawExec(query string, args ...any) *ExecResult {
 }
 
 func (db *DB) Query(query string, args ...any) *QueryResult {
+	if db.schemaTx != nil {
+		return db.schemaTx.Query(query, args...)
+	}
 	query, args = db.rewriteFTS(query, args)
 	args = flatArgs(args)
 	r := baseQueryRaw(db.conn, nil, query, args...)
@@ -771,7 +788,6 @@ func (db *DB) rawQuery(query string, args ...any) *QueryResult {
 	return db.Query(query, args...)
 }
 
-
 func (db *DB) lock() {
 	if db.sqliteMu != nil {
 		db.sqliteMu.Lock()
@@ -783,7 +799,6 @@ func (db *DB) unlock() {
 		db.sqliteMu.Unlock()
 	}
 }
-
 
 var identifierRegex = `(?:['"` + "`" + `][^'"` + "`" + `]+['"` + "`" + `]|[\w\-]+)`
 var likeFieldReg = regexp.MustCompile(`(?i)(` + identifierRegex + `(?:\.` + identifierRegex + `)*)\s+LIKE\s*$`)
@@ -957,7 +972,7 @@ func (db *DB) extractTableName(query string, field string) string {
 	parts := strings.Split(cleanField, ".")
 	if len(parts) > 1 {
 		alias := parts[0]
-		reg := regexp.MustCompile(fmt.Sprintf(`(?i)FROM\s+(%s)\s+(?:AS\s+)?["\` + "`" + `]?%s["\` + "`" + `]?|JOIN\s+(%s)\s+(?:AS\s+)?["\` + "`" + `]?%s["\` + "`" + `]?`, identifierRegex, alias, identifierRegex, alias))
+		reg := regexp.MustCompile(fmt.Sprintf(`(?i)FROM\s+(%s)\s+(?:AS\s+)?["\`+"`"+`]?%s["\`+"`"+`]?|JOIN\s+(%s)\s+(?:AS\s+)?["\`+"`"+`]?%s["\`+"`"+`]?`, identifierRegex, alias, identifierRegex, alias))
 		match := reg.FindStringSubmatch(query)
 		if len(match) > 1 {
 			if match[1] != "" {
@@ -1077,7 +1092,7 @@ func (db *DB) getTable(table string) *TableStruct {
 			colName := cast.String(row["name"])
 			colType := strings.ToUpper(cast.String(row["type"]))
 			isPk := cast.Int(row["pk"]) > 0
-			
+
 			ts.Columns = append(ts.Columns, colName)
 			if colName == "autoVersion" {
 				ts.VersionField = "autoVersion"

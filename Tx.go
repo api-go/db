@@ -10,6 +10,7 @@ import (
 )
 
 type Tx struct {
+	schemaTables            map[string]bool
 	conn                    *sql.Tx
 	db                      *DB
 	sqliteMu                *sync.Mutex
@@ -44,8 +45,46 @@ func (tx *Tx) Commit() error {
 		tx.logger.LogQueryError(err.Error(), *tx.lastSql, tx.lastArgs, -1)
 	} else {
 		tx.isCommittedOrRollbacked = true
+		tx.db.tablesLock.Lock()
+		for name := range tx.schemaTables {
+			delete(tx.db.tables, name)
+		}
+		tx.db.tablesLock.Unlock()
 	}
 	return err
+}
+
+// Sync executes SQLite schema changes on this transaction's connection.
+// The caller owns commit/rollback, including any metadata writes in this Tx.
+func (tx *Tx) Sync(schema string) error {
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.isCommittedOrRollbacked {
+		return fmt.Errorf("transaction is finished")
+	}
+	if !strings.HasPrefix(tx.db.Config.Type, "sqlite") {
+		return fmt.Errorf("transactional schema sync currently requires SQLite")
+	}
+	// Lock before the first schema read, avoiding a deferred read-to-write
+	// upgrade racing with another writer using this database handle.
+	tx.lock()
+	runner := *tx.db
+	runner.schemaTx = tx
+	runner.tables = make(map[string]*TableStruct)
+	runner.tablesLock = new(sync.RWMutex)
+	for _, group := range ParseSchema(schema) {
+		for _, table := range group.Tables {
+			if tx.schemaTables == nil {
+				tx.schemaTables = make(map[string]bool)
+			}
+			tx.schemaTables[table.Name] = true
+			if table.ShadowDelete {
+				tx.schemaTables[table.Name+"_deleted"] = true
+			}
+		}
+	}
+	return runner.Sync(schema)
 }
 
 func (tx *Tx) Rollback() error {
@@ -129,7 +168,6 @@ func (tx *Tx) Query(query string, args ...any) *QueryResult {
 	return r
 }
 
-
 func (tx *Tx) Insert(table string, data any) *ExecResult {
 	query, values := tx.MakeInsertSql(table, data, false)
 	return tx.Exec(query, values...)
@@ -191,5 +229,3 @@ func (tx *Tx) unlock() {
 	tx.sqliteMu.Unlock()
 	tx.hasLock = false
 }
-
-
