@@ -9,7 +9,7 @@
 - 字段类型必须提供；全文用例显式定义 `title t` 并另写 `title TI`，验证独立全文声明，不再把 `title TI` 当字段定义。
 - 非 SQLite 实例的物理同步尚未实测；旧数字分组仍待上层迁移后移除，不能视为整个索引改造完成。
 
-## v1.5.12 验证
+## v1.5.14 验证
 - `TestNumericIndexGroupsAreRejected` 验证 Schema DSL 拒绝 `I<n>`/`U<n>`/`TI<n>` 旧数字分组，复合索引必须使用独立表级声明。
 - `go test -v ./...` 与 `go test -bench=. ./...` 作为发布前完整验证执行。
 - `git diff --check` 通过。
