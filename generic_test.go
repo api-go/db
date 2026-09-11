@@ -1,12 +1,12 @@
 package db_test
 
 import (
-	"testing"
 	"apigo.cc/go/cast"
 	"apigo.cc/go/db"
 	"apigo.cc/go/file"
 	"apigo.cc/go/log"
 	_ "modernc.org/sqlite"
+	"testing"
 )
 
 func TestGenericQuery(t *testing.T) {

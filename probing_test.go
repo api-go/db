@@ -21,9 +21,8 @@ func TestTableProbing(t *testing.T) {
 		file.Remove(dbPath)
 	}()
 
-
 	dbInst.Exec("CREATE TABLE users (id char(8) PRIMARY KEY, name TEXT, autoVersion BIGINT)")
-	
+
 	ts := dbInst.getTable("users")
 	if ts.VersionField != "autoVersion" {
 		t.Errorf("Expected version field 'autoVersion', got '%s'", ts.VersionField)

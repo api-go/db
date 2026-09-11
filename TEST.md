@@ -1,5 +1,8 @@
 # @go/db 测试报告
 
+## Unreleased IPv6 参数绑定
+- `TestMakeKeysVarsValuesBindsIPv6Loopback` 验证 `::1` 始终作为参数值绑定，不会被解释为 SQL 表达式。
+
 ## 2026-09-04 Schema 事务
 - TestSchemaTransactionRollbackAndCommit 验证同行修改、列/索引/影子表结构的事务同步，失败回滚及成功提交；全量和定向 race 通过。
 

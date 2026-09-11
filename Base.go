@@ -133,7 +133,6 @@ func baseQueryRaw(db *sql.DB, tx *sql.Tx, query string, args ...any) *QueryResul
 	return &QueryResult{Sql: &query, Args: args, usedTime: usedTime, rows: rows}
 }
 
-
 func quote(quoteTag string, text string) string {
 	a := strings.Split(text, ".")
 	for i, v := range a {
@@ -344,7 +343,7 @@ func MakeKeysVarsValues(data any) ([]string, []string, []any) {
 				v = v.Elem()
 			}
 			keys = append(keys, f.name)
-			if v.Kind() == reflect.String && v.Len() > 0 && v.String()[0] == ':' {
+			if isSQLExpression(v) {
 				vars = append(vars, v.String()[1:])
 			} else {
 				vars = append(vars, "?")
@@ -362,7 +361,7 @@ func MakeKeysVarsValues(data any) ([]string, []string, []any) {
 				v = v.Elem()
 			}
 			keys = append(keys, cast.String(k.Interface()))
-			if v.Kind() == reflect.String && v.Len() > 0 && v.String()[0] == ':' {
+			if isSQLExpression(v) {
 				vars = append(vars, v.String()[1:])
 			} else {
 				vars = append(vars, "?")
@@ -376,4 +375,9 @@ func MakeKeysVarsValues(data any) ([]string, []string, []any) {
 	}
 
 	return keys, vars, values
+}
+
+func isSQLExpression(value reflect.Value) bool {
+	return value.IsValid() && value.Kind() == reflect.String && value.Len() > 1 &&
+		value.String()[0] == ':' && value.String()[1] != ':'
 }

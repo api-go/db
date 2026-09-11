@@ -338,6 +338,16 @@ func TestInsertReplaceUpdateDelete(t *testing.T) {
 	finishDB(dbInst, t)
 }
 
+func TestMakeKeysVarsValuesBindsIPv6Loopback(t *testing.T) {
+	_, vars, values := db.MakeKeysVarsValues(map[string]any{"clientIP": "::1"})
+	if len(vars) != 1 || vars[0] != "?" {
+		t.Fatalf("IPv6 loopback must use a bound parameter, got vars %#v", vars)
+	}
+	if len(values) != 1 || values[0] != "::1" {
+		t.Fatalf("IPv6 loopback value = %#v", values)
+	}
+}
+
 func TestTransaction(t *testing.T) {
 	n1 := countConnection()
 
@@ -352,7 +362,7 @@ func TestTransaction(t *testing.T) {
 	data := map[string]any{
 		"phone": 18033336666,
 		"name":  "Star",
-		"time": ":(strftime('%Y-%m-%d %H:%M:%f', datetime('now', '-1 day'), 'localtime'))",
+		"time":  ":(strftime('%Y-%m-%d %H:%M:%f', datetime('now', '-1 day'), 'localtime'))",
 	}
 	if dbInst.Config.Type == "mysql" {
 		data["time"] = ":DATE_SUB(NOW(), INTERVAL 1 DAY)"

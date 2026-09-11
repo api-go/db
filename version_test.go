@@ -24,7 +24,6 @@ func TestVersionControl(t *testing.T) {
 		file.Remove(dbPath)
 	}()
 
-
 	dbInst.Exec("CREATE TABLE versioned_docs (id INTEGER PRIMARY KEY, content TEXT, autoVersion BIGINT)")
 
 	// Initial insert

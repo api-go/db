@@ -22,7 +22,6 @@ func ResetAllForTest() {
 	ResetInstancesForTest()
 }
 
-
 func SetConfigForTest(name string, conf *Config) {
 	dbConfigsLock.Lock()
 	dbConfigs[name] = conf

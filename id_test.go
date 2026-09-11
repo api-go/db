@@ -47,39 +47,38 @@ func TestAutoRandomID(t *testing.T) {
 			t.Errorf("Expected ID %s, got %s", manualID, idStr)
 		}
 	})
-    
-    t.Run("AutoFillEmptyID", func(t *testing.T) {
-    	data := map[string]any{"id": "", "name": "test3"}
-    	res := dbInst.Insert("test_id", data)
-    	if res.Error != nil {
-    		t.Fatalf("Insert failed: %v", res.Error)
-    	}
 
-    	qr := dbInst.Query("SELECT id FROM test_id WHERE name='test3'")
-    	idStr, _ := db.To[string](qr)
-    	if len(idStr) != 12 {
-    		t.Errorf("Expected ID length 12, got %d (%s)", len(idStr), idStr)
-    	}
-    })
+	t.Run("AutoFillEmptyID", func(t *testing.T) {
+		data := map[string]any{"id": "", "name": "test3"}
+		res := dbInst.Insert("test_id", data)
+		if res.Error != nil {
+			t.Fatalf("Insert failed: %v", res.Error)
+		}
 
-    t.Run("RedisIDMaker", func(t *testing.T) {
-    	// Mock redis config
-    	os.Setenv("REDIS_TEST", "redis://:@localhost:6379/1")
-    	dbInst.Config.Redis = "test"
+		qr := dbInst.Query("SELECT id FROM test_id WHERE name='test3'")
+		idStr, _ := db.To[string](qr)
+		if len(idStr) != 12 {
+			t.Errorf("Expected ID length 12, got %d (%s)", len(idStr), idStr)
+		}
+	})
 
-    	data := map[string]any{"name": "test_redis"}
-    	res := dbInst.Insert("test_id", data)
-    	// Even if redis is not running, it should fallback to default id maker or fail gracefully
-    	// But here we mainly want to ensure it compiles and runs the logic path
-    	if res.Error != nil {
-    		t.Logf("Insert with redis config (might fail if no redis): %v", res.Error)
-    	} else {
-    		qr := dbInst.Query("SELECT id FROM test_id WHERE name='test_redis'")
-    		idStr, _ := db.To[string](qr)
-    		if len(idStr) != 12 {
-    			t.Errorf("Expected ID length 12, got %d (%s)", len(idStr), idStr)
-    		}
-    	}
-    })
-    }
+	t.Run("RedisIDMaker", func(t *testing.T) {
+		// Mock redis config
+		os.Setenv("REDIS_TEST", "redis://:@localhost:6379/1")
+		dbInst.Config.Redis = "test"
 
+		data := map[string]any{"name": "test_redis"}
+		res := dbInst.Insert("test_id", data)
+		// Even if redis is not running, it should fallback to default id maker or fail gracefully
+		// But here we mainly want to ensure it compiles and runs the logic path
+		if res.Error != nil {
+			t.Logf("Insert with redis config (might fail if no redis): %v", res.Error)
+		} else {
+			qr := dbInst.Query("SELECT id FROM test_id WHERE name='test_redis'")
+			idStr, _ := db.To[string](qr)
+			if len(idStr) != 12 {
+				t.Errorf("Expected ID length 12, got %d (%s)", len(idStr), idStr)
+			}
+		}
+	})
+}
