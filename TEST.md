@@ -1,5 +1,8 @@
 # @go/db 测试报告
 
+## v1.5.20 公共默认语义
+- 覆盖裸 MySQL 不选择数据库、裸 PostgreSQL 使用 `postgres`，以及 `mysql:///apigo`、`pgx:///apigo` 的显式库解析和自动创建。
+
 ## v1.5.19 默认库与 MariaDB TCP 引导
 - `postgres` 与 `pgx` 真实验证默认创建并连接 `127.0.0.1:5432/apigo`。
 - MariaDB 12.3 在仅有 Homebrew 默认 socket 管理员的初始状态下，自动创建 `apigo@localhost/127.0.0.1`、授权 `apigo` 库，随后 TCP 查询成功。

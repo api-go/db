@@ -160,7 +160,7 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 			dbInfo.Host = net.JoinHostPort(urlInfo.Hostname(), "5432")
 		}
 		if dbInfo.DB == "" {
-			dbInfo.DB = "apigo"
+			dbInfo.DB = "postgres"
 		}
 		if dbInfo.User == "" {
 			if current, currentErr := user.Current(); currentErr == nil {
@@ -173,9 +173,6 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 			dbInfo.Host = "127.0.0.1:3306"
 		} else if urlInfo.Port() == "" {
 			dbInfo.Host = net.JoinHostPort(urlInfo.Hostname(), "3306")
-		}
-		if dbInfo.DB == "" {
-			dbInfo.DB = "apigo"
 		}
 		if dbInfo.User == "" {
 			dbInfo.User = "apigo"

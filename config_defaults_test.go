@@ -10,10 +10,12 @@ func TestNetworkDatabaseDefaults(t *testing.T) {
 		dbName  string
 		user    string
 	}{
-		{"mysql", "mysql", "127.0.0.1:3306", "apigo", "apigo"},
-		{"mysql://", "mysql", "127.0.0.1:3306", "apigo", "apigo"},
+		{"mysql", "mysql", "127.0.0.1:3306", "", "apigo"},
+		{"mysql://", "mysql", "127.0.0.1:3306", "", "apigo"},
+		{"mysql:///apigo", "mysql", "127.0.0.1:3306", "apigo", "apigo"},
 		{"mysql://dbhost/example", "mysql", "dbhost:3306", "example", "apigo"},
-		{"postgres", "postgres", "127.0.0.1:5432", "apigo", ""},
+		{"postgres", "postgres", "127.0.0.1:5432", "postgres", ""},
+		{"pgx:///apigo", "pgx", "127.0.0.1:5432", "apigo", ""},
 		{"postgresql://dbhost/example", "postgresql", "dbhost:5432", "example", ""},
 	}
 	for _, tt := range tests {

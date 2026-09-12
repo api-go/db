@@ -1,5 +1,10 @@
 # 变更记录 - @go/db
 
+## [v1.5.20] - 2026-09-12
+- 移除公共包中的 `apigo` 隐式业务库名：PostgreSQL 裸简写回到保证存在的 `postgres`，MySQL 裸简写不选择数据库。
+- 支持 `mysql:///数据库`、`pgx:///数据库` 省略 host/端口并自动创建显式数据库。
+- MySQL/MariaDB 本机引导可只创建 loopback `apigo` 登录账户；仅在 DSN 明确指定库名时创建并授权数据库。
+
 ## [v1.5.19] - 2026-09-12
 - `postgres`、`pgx`、`postgresql`、`pg`、`pgsql` 的零配置默认库统一为 `apigo`，不存在时通过 PostgreSQL maintenance database 自动创建。
 - MySQL/MariaDB 零配置运行身份统一为仅限本机的 `apigo` TCP 用户；首次认证失败时使用 Unix socket 完成一次性数据库、用户和授权引导，随后重新使用 TCP。

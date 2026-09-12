@@ -52,7 +52,7 @@ func (c *SecureMysqlConnector) Connect(ctx context.Context) (driver.Conn, error)
 	if !allowLocal || !errors.As(err, &mysqlErr) || mysqlErr.Number != 1044 && mysqlErr.Number != 1045 && mysqlErr.Number != 1698 {
 		return conn, err
 	}
-	if !databaseNamePattern.MatchString(cfg.DBName) {
+	if cfg.DBName != "" && !databaseNamePattern.MatchString(cfg.DBName) {
 		return nil, err
 	}
 	for _, socket := range []string{"/tmp/mysql.sock", "/run/mysqld/mysqld.sock", "/var/run/mysqld/mysqld.sock"} {
@@ -89,11 +89,15 @@ func bootstrapLocalTCP(ctx context.Context, target *mysql.Config, socket, bootst
 		return driver.ErrSkip
 	}
 	statements := []string{
-		"CREATE DATABASE IF NOT EXISTS `" + target.DBName + "`",
 		"CREATE USER IF NOT EXISTS 'apigo'@'localhost' IDENTIFIED BY ''",
 		"CREATE USER IF NOT EXISTS 'apigo'@'127.0.0.1' IDENTIFIED BY ''",
-		"GRANT ALL PRIVILEGES ON `" + target.DBName + "`.* TO 'apigo'@'localhost'",
-		"GRANT ALL PRIVILEGES ON `" + target.DBName + "`.* TO 'apigo'@'127.0.0.1'",
+	}
+	if target.DBName != "" {
+		statements = append(statements,
+			"CREATE DATABASE IF NOT EXISTS `"+target.DBName+"`",
+			"GRANT ALL PRIVILEGES ON `"+target.DBName+"`.* TO 'apigo'@'localhost'",
+			"GRANT ALL PRIVILEGES ON `"+target.DBName+"`.* TO 'apigo'@'127.0.0.1'",
+		)
 	}
 	for _, statement := range statements {
 		if _, err = execer.ExecContext(ctx, statement, nil); err != nil {
