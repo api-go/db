@@ -1,5 +1,10 @@
 # 变更记录 - @go/db
 
+## [v1.5.19] - 2026-09-12
+- `postgres`、`pgx`、`postgresql`、`pg`、`pgsql` 的零配置默认库统一为 `apigo`，不存在时通过 PostgreSQL maintenance database 自动创建。
+- MySQL/MariaDB 零配置运行身份统一为仅限本机的 `apigo` TCP 用户；首次认证失败时使用 Unix socket 完成一次性数据库、用户和授权引导，随后重新使用 TCP。
+- 显式 host 或用户的 DSN 不执行本机身份引导，集群连接保持完全显式。
+
 ## [v1.5.18] - 2026-09-12
 - 新增 PostgreSQL/pgx 应用层驱动支持和跨方言 SQL、Schema、索引兼容。
 - `mysql`、`postgres` 及 PostgreSQL 别名支持零配置简写；host 和端口分别默认到本机回环地址及协议标准端口。

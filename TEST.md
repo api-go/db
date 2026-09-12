@@ -1,5 +1,10 @@
 # @go/db 测试报告
 
+## v1.5.19 默认库与 MariaDB TCP 引导
+- `postgres` 与 `pgx` 真实验证默认创建并连接 `127.0.0.1:5432/apigo`。
+- MariaDB 12.3 在仅有 Homebrew 默认 socket 管理员的初始状态下，自动创建 `apigo@localhost/127.0.0.1`、授权 `apigo` 库，随后 TCP 查询成功。
+- MySQL/MariaDB 运行连接不依赖 Unix socket；socket 仅用于本机零配置首次引导。
+
 ## v1.5.18 PostgreSQL/MySQL 验证
 - 单元测试覆盖网络数据库简写、默认 host/端口/库/用户和 PostgreSQL SQL/Schema 转换。
 - PostgreSQL 18.6：真实 TCP 零配置连接及不存在数据库自动创建通过。

@@ -49,21 +49,58 @@ func (c *SecureMysqlConnector) Connect(ctx context.Context) (driver.Conn, error)
 	conn, err := connectWithAutoCreate(ctx, cfg)
 	var mysqlErr *mysql.MySQLError
 	localUser, allowLocal := c.conf.LocalAuthFallback()
-	if !allowLocal || !errors.As(err, &mysqlErr) || mysqlErr.Number != 1045 && mysqlErr.Number != 1698 {
+	if !allowLocal || !errors.As(err, &mysqlErr) || mysqlErr.Number != 1044 && mysqlErr.Number != 1045 && mysqlErr.Number != 1698 {
 		return conn, err
+	}
+	if !databaseNamePattern.MatchString(cfg.DBName) {
+		return nil, err
 	}
 	for _, socket := range []string{"/tmp/mysql.sock", "/run/mysqld/mysqld.sock", "/var/run/mysqld/mysqld.sock"} {
 		if _, statErr := os.Stat(socket); statErr != nil {
 			continue
 		}
-		local := cfg.Clone()
-		local.User = localUser
-		local.Net = "unix"
-		local.Addr = socket
-		local.Passwd = ""
-		return connectWithAutoCreate(ctx, local)
+		for _, bootstrapUser := range []string{localUser, "root"} {
+			if bootstrapLocalTCP(ctx, cfg, socket, bootstrapUser) == nil {
+				return connectWithAutoCreate(ctx, cfg)
+			}
+		}
 	}
 	return nil, err
+}
+
+func bootstrapLocalTCP(ctx context.Context, target *mysql.Config, socket, bootstrapUser string) error {
+	local := target.Clone()
+	local.User = bootstrapUser
+	local.Passwd = ""
+	local.Net = "unix"
+	local.Addr = socket
+	local.DBName = ""
+	connector, err := mysql.NewConnector(local)
+	if err != nil {
+		return err
+	}
+	conn, err := connector.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	execer, ok := conn.(driver.ExecerContext)
+	if !ok {
+		return driver.ErrSkip
+	}
+	statements := []string{
+		"CREATE DATABASE IF NOT EXISTS `" + target.DBName + "`",
+		"CREATE USER IF NOT EXISTS 'apigo'@'localhost' IDENTIFIED BY ''",
+		"CREATE USER IF NOT EXISTS 'apigo'@'127.0.0.1' IDENTIFIED BY ''",
+		"GRANT ALL PRIVILEGES ON `" + target.DBName + "`.* TO 'apigo'@'localhost'",
+		"GRANT ALL PRIVILEGES ON `" + target.DBName + "`.* TO 'apigo'@'127.0.0.1'",
+	}
+	for _, statement := range statements {
+		if _, err = execer.ExecContext(ctx, statement, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func connectWithAutoCreate(ctx context.Context, cfg *mysql.Config) (driver.Conn, error) {
