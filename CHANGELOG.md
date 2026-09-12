@@ -1,5 +1,13 @@
 # 变更记录 - @go/db
 
+## [v1.5.18] - 2026-09-12
+- 新增 PostgreSQL/pgx 应用层驱动支持和跨方言 SQL、Schema、索引兼容。
+- `mysql`、`postgres` 及 PostgreSQL 别名支持零配置简写；host 和端口分别默认到本机回环地址及协议标准端口。
+- MySQL/PostgreSQL 目标库不存在且账户有权限时自动创建并重连。
+- MySQL 零配置在 Homebrew MariaDB 的 TCP root 认证失败时，可受控回退到本机 Unix socket 系统用户；显式连接不回退。
+- MySQL Unix socket 参数、长字符串索引前缀和 PostgreSQL 大小写标识符、占位符、字段类型均增加兼容。
+- 依赖升级到 `config v1.5.8`、`redis v1.5.18`。
+
 ## [v1.5.17] - 2026-09-12
 - 修复以 `::` 开头的 IPv6 普通值在写入时被误判为旧式 `:SQL expression` 的问题。
 

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"apigo.cc/go/cast"
 )
 
 var sizedSchemaType = regexp.MustCompile(`^[cv][1-9][0-9]*$`)
@@ -169,4 +171,44 @@ func (db *DB) indexColumns(fields []string) string {
 		}
 	}
 	return strings.Join(quoted, ", ")
+}
+
+func (db *DB) mysqlIndexColumns(table *TableStruct, fields []string) string {
+	stringFields := 0
+	fieldTypes := make(map[string]string, len(table.Fields))
+	for _, field := range table.Fields {
+		fieldTypes[field.Name] = strings.ToLower(field.Type)
+	}
+	for _, field := range fields {
+		typ := fieldTypes[strings.TrimPrefix(field, "-")]
+		if strings.HasPrefix(typ, "varchar(") || strings.HasPrefix(typ, "char(") || strings.Contains(typ, "text") {
+			stringFields++
+		}
+	}
+	prefixLength := 768
+	if stringFields > 1 {
+		prefixLength /= stringFields
+	}
+	quoted := make([]string, len(fields))
+	for i, field := range fields {
+		name := strings.TrimPrefix(field, "-")
+		quoted[i] = db.Quote(name)
+		typ := fieldTypes[name]
+		if strings.Contains(typ, "text") || mysqlStringLength(typ) > prefixLength {
+			quoted[i] += fmt.Sprintf("(%d)", prefixLength)
+		}
+		if strings.HasPrefix(field, "-") {
+			quoted[i] += " DESC"
+		}
+	}
+	return strings.Join(quoted, ", ")
+}
+
+func mysqlStringLength(typ string) int {
+	start := strings.IndexByte(typ, '(')
+	end := strings.IndexByte(typ, ')')
+	if start < 0 || end <= start+1 {
+		return 0
+	}
+	return cast.Int(typ[start+1 : end])
 }

@@ -150,6 +150,7 @@ func quotes(quoteTag string, texts []string) string {
 
 func makeInsertSql(quoteTag string, table string, data any, useReplace bool, versionField string, nextVer int64, idField string, nextId string, ts *TableStruct) (string, []any) {
 	keys, vars, values := MakeKeysVarsValues(data)
+	keys, vars, values = canonicalColumnValues(keys, vars, values, ts)
 
 	// 全文检索影子列自动分词处理
 	if ts != nil {
@@ -219,6 +220,7 @@ func makeInsertSql(quoteTag string, table string, data any, useReplace bool, ver
 func makeUpdateSql(quoteTag string, table string, data any, conditions string, versionField string, nextVer int64, ts *TableStruct, args ...any) (string, []any) {
 	args = flatArgs(args)
 	keys, vars, values := MakeKeysVarsValues(data)
+	keys, vars, values = canonicalColumnValues(keys, vars, values, ts)
 
 	// 全文检索影子列自动分词处理
 	if ts != nil {
@@ -277,6 +279,56 @@ func makeUpdateSql(quoteTag string, table string, data any, conditions string, v
 	}
 	query := fmt.Sprintf("update %s set %s%s", quote(quoteTag, table), strings.Join(newKeys, ","), conditions)
 	return query, newValues
+}
+
+func canonicalColumnValues(keys, vars []string, values []any, table *TableStruct) ([]string, []string, []any) {
+	if table == nil || len(table.Columns) == 0 {
+		return keys, vars, values
+	}
+	canonical := make(map[string]string, len(table.Columns))
+	for _, column := range table.Columns {
+		canonical[strings.ToLower(column)] = column
+	}
+	outKeys := make([]string, 0, len(keys))
+	outVars := make([]string, 0, len(vars))
+	outValuesByKey := make([]any, 0, len(keys))
+	outHasValue := make([]bool, 0, len(keys))
+	positions := make(map[string]int, len(keys))
+	aliases := make(map[string]bool, len(keys))
+	valueIndex := 0
+	for i, key := range keys {
+		hasValue := vars[i] == "?"
+		var value any
+		if hasValue {
+			value = values[valueIndex]
+			valueIndex++
+		}
+		column := canonical[strings.ToLower(key)]
+		if column == "" {
+			column = key
+		}
+		folded := strings.ToLower(column)
+		isAlias := key != column
+		if position, exists := positions[folded]; exists {
+			if isAlias || !aliases[folded] {
+				outVars[position], outValuesByKey[position], outHasValue[position], aliases[folded] = vars[i], value, hasValue, isAlias
+			}
+			continue
+		}
+		positions[folded] = len(outKeys)
+		aliases[folded] = isAlias
+		outKeys = append(outKeys, column)
+		outVars = append(outVars, vars[i])
+		outValuesByKey = append(outValuesByKey, value)
+		outHasValue = append(outHasValue, hasValue)
+	}
+	outValues := make([]any, 0, len(values))
+	for i, value := range outValuesByKey {
+		if outHasValue[i] {
+			outValues = append(outValues, value)
+		}
+	}
+	return outKeys, outVars, outValues
 }
 
 func (db *DB) MakeInsertSql(table string, data any, useReplace bool) (string, []any) {

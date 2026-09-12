@@ -135,7 +135,7 @@ func ParseField(line string) TableField {
 		case "uti":
 			field.Type = "tinyint unsigned"
 		case "b":
-			field.Type = "tinyint unsigned"
+			field.Type = "boolean"
 		case "bi":
 			field.Type = "bigint"
 		case "ubi":
@@ -286,11 +286,8 @@ func (field *TableField) Parse(tableType string) {
 		if strings.Contains(lowerType, "varchar") || strings.Contains(lowerType, "text") {
 			a = append(a, " COLLATE utf8mb4_general_ci")
 		}
-	} else if tableType == "pg" || tableType == "pgsql" || tableType == "postgres" {
-		typ := field.Type
-		if typ == "json" {
-			typ = "jsonb"
-		}
+	} else if isPostgresType(tableType) {
+		typ := postgresFieldType(field.Type)
 		if field.Extra == "AUTO_INCREMENT" {
 			if strings.Contains(typ, "bigint") {
 				typ = "bigserial"
@@ -301,7 +298,12 @@ func (field *TableField) Parse(tableType string) {
 		}
 		a = append(a, fmt.Sprintf("\"%s\" %s", field.Name, typ))
 	} else {
-		a = append(a, fmt.Sprintf("\"%s\" %s", field.Name, field.Type))
+		typ := field.Type
+		if strings.HasPrefix(tableType, "sqlite") && strings.EqualFold(typ, "boolean") {
+			// Keep SQLite's historical numeric affinity and result conversion for b.
+			typ = "tinyint unsigned"
+		}
+		a = append(a, fmt.Sprintf("\"%s\" %s", field.Name, typ))
 	}
 
 	if field.Extra != "" && !strings.Contains(field.Extra, "PRIMARY KEY") {
@@ -320,7 +322,7 @@ func (field *TableField) Parse(tableType string) {
 	if strings.HasPrefix(tableType, "sqlite") || tableType == "chai" {
 		field.Comment = ""
 		field.Type = "numeric"
-	} else if tableType == "pg" || tableType == "pgsql" || tableType == "postgres" {
+	} else if isPostgresType(tableType) {
 		// PostgreSQL comments are separate statements
 	} else {
 		if field.Comment != "" {
@@ -328,6 +330,40 @@ func (field *TableField) Parse(tableType string) {
 		}
 	}
 	field.Desc = strings.Join(a, "")
+}
+
+func isPostgresType(tableType string) bool {
+	switch tableType {
+	case "pg", "pgsql", "postgres", "postgresql", "pgx":
+		return true
+	default:
+		return false
+	}
+}
+
+func postgresFieldType(fieldType string) string {
+	lower := strings.ToLower(strings.TrimSpace(fieldType))
+	lower = strings.TrimSuffix(lower, " unsigned")
+	switch lower {
+	case "tinyint", "smallint":
+		return "smallint"
+	case "middleint", "int", "integer":
+		return "integer"
+	case "bigint":
+		return "bigint"
+	case "float":
+		return "real"
+	case "double":
+		return "double precision"
+	case "datetime":
+		return "timestamp"
+	case "blob":
+		return "bytea"
+	case "json":
+		return "jsonb"
+	default:
+		return fieldType
+	}
 }
 
 // Sync 根据 Schema 描述文本同步数据库结构
@@ -370,7 +406,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 	keySetFields := make(map[string]string)
 	ftsFields := make([]string, 0)
 
-	isPostgres := db.Config.Type == "pg" || db.Config.Type == "pgsql" || db.Config.Type == "postgres"
+	isPostgres := isPostgresType(db.Config.Type)
 
 	table.Columns = make([]string, 0, len(table.Fields))
 
@@ -476,7 +512,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 					} else if isPostgres {
 						keySet = fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.indexColumns(groupDef.Fields))
 					} else {
-						keySet = fmt.Sprintf("UNIQUE KEY "+db.Quote("%s")+" ("+db.indexColumns(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
+						keySet = fmt.Sprintf("UNIQUE KEY "+db.Quote("%s")+" ("+db.mysqlIndexColumns(table, groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
 					}
 					keySets = append(keySets, keySet)
 					keySetBy[keyName] = keySet
@@ -487,7 +523,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 					} else if isPostgres {
 						keySet = fmt.Sprintf("CREATE INDEX IF NOT EXISTS \"%s\" ON \"%s\" (%s)", keyName, table.Name, db.indexColumns(groupDef.Fields))
 					} else {
-						keySet = fmt.Sprintf("KEY "+db.Quote("%s")+" ("+db.indexColumns(groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
+						keySet = fmt.Sprintf("KEY "+db.Quote("%s")+" ("+db.mysqlIndexColumns(table, groupDef.Fields)+") COMMENT '%s'", keyName, field.Comment)
 					}
 					keySets = append(keySets, keySet)
 					keySetBy[keyName] = keySet
@@ -628,7 +664,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		for keyId := range oldIndexes {
 			if keyId != "PRIMARY" && !isPostgres && strings.ToLower(keySetFields[keyId]) != strings.ToLower(oldIndexes[keyId]) {
 				if strings.HasPrefix(db.Config.Type, "sqlite") {
-					if table.Name == "_Table" || table.Name == "_Field" {
+					if table.Name == "_Table" || table.Name == "_Field" || table.Name == "_Table_deleted" || table.Name == "_Field_deleted" {
 						continue
 					}
 					if strings.HasPrefix(keyId, "sqlite_autoindex_") {
@@ -697,7 +733,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		for oldFieldName := range oldFields {
 			if !newFieldExists[oldFieldName] {
 				if strings.HasPrefix(db.Config.Type, "sqlite") {
-					if table.Name == "_Table" || table.Name == "_Field" {
+					if table.Name == "_Table" || table.Name == "_Field" || table.Name == "_Table_deleted" || table.Name == "_Field_deleted" {
 						continue
 					}
 					actions = append(actions, "ALTER TABLE "+db.Quote(table.Name)+" DROP COLUMN "+db.Quote(oldFieldName))

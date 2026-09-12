@@ -4,10 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql/driver"
+	"errors"
+	"net/url"
+	"os"
+	"regexp"
 
-	"github.com/go-sql-driver/mysql"
 	"apigo.cc/go/db"
 	"apigo.cc/go/safe"
+	"github.com/go-sql-driver/mysql"
 )
 
 type SecureMysqlConnector struct {
@@ -16,22 +20,81 @@ type SecureMysqlConnector struct {
 	tls  *tls.Config
 }
 
+var databaseNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_$]*$`)
+
 func (c *SecureMysqlConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	cfg, err := mysql.ParseDSN(c.conf.Args)
-	if err != nil {
-		cfg = mysql.NewConfig()
-	}
+	cfg := mysql.NewConfig()
+	params, _ := url.ParseQuery(c.conf.Args)
 	cfg.User = c.conf.User
-	cfg.Net = "tcp"
-	cfg.Addr = c.conf.Host
+	cfg.Net, cfg.Addr = params.Get("net"), params.Get("addr")
+	params.Del("net")
+	params.Del("addr")
+	if cfg.Net == "" {
+		cfg.Net = "tcp"
+	}
+	if cfg.Addr == "" {
+		cfg.Addr = c.conf.Host
+	}
+	for key, values := range params {
+		if len(values) > 0 {
+			cfg.Params[key] = values[len(values)-1]
+		}
+	}
 	cfg.DBName = c.conf.DB
 	cfg.TLS = c.tls
 	pwdBuf := c.pwd.Open()
 	defer pwdBuf.Close()
 	cfg.Passwd = pwdBuf.String()
 
+	conn, err := connectWithAutoCreate(ctx, cfg)
+	var mysqlErr *mysql.MySQLError
+	localUser, allowLocal := c.conf.LocalAuthFallback()
+	if !allowLocal || !errors.As(err, &mysqlErr) || mysqlErr.Number != 1045 && mysqlErr.Number != 1698 {
+		return conn, err
+	}
+	for _, socket := range []string{"/tmp/mysql.sock", "/run/mysqld/mysqld.sock", "/var/run/mysqld/mysqld.sock"} {
+		if _, statErr := os.Stat(socket); statErr != nil {
+			continue
+		}
+		local := cfg.Clone()
+		local.User = localUser
+		local.Net = "unix"
+		local.Addr = socket
+		local.Passwd = ""
+		return connectWithAutoCreate(ctx, local)
+	}
+	return nil, err
+}
+
+func connectWithAutoCreate(ctx context.Context, cfg *mysql.Config) (driver.Conn, error) {
 	tmpConnector, err := mysql.NewConnector(cfg)
 	if err != nil {
+		return nil, err
+	}
+	conn, err := tmpConnector.Connect(ctx)
+	var mysqlErr *mysql.MySQLError
+	if !errors.As(err, &mysqlErr) || mysqlErr.Number != 1049 || !databaseNamePattern.MatchString(cfg.DBName) {
+		return conn, err
+	}
+
+	maintenance := cfg.Clone()
+	maintenance.DBName = ""
+	maintenanceConnector, createErr := mysql.NewConnector(maintenance)
+	if createErr != nil {
+		return nil, err
+	}
+	maintenanceConn, createErr := maintenanceConnector.Connect(ctx)
+	if createErr != nil {
+		return nil, err
+	}
+	execer, ok := maintenanceConn.(driver.ExecerContext)
+	if !ok {
+		_ = maintenanceConn.Close()
+		return nil, err
+	}
+	_, createErr = execer.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS `"+cfg.DBName+"`", nil)
+	_ = maintenanceConn.Close()
+	if createErr != nil {
 		return nil, err
 	}
 	return tmpConnector.Connect(ctx)

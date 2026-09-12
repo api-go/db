@@ -122,6 +122,7 @@ func (tx *Tx) CheckFinished() error {
 }
 
 func (tx *Tx) Prepare(query string) *Stmt {
+	query = tx.db.prepareQuery(query)
 	tx.lock()
 	tx.lastSql = &query
 	r := basePrepare(nil, tx.conn, query)
@@ -134,6 +135,7 @@ func (tx *Tx) Prepare(query string) *Stmt {
 
 func (tx *Tx) Exec(query string, args ...any) *ExecResult {
 	query, args = tx.db.rewriteFTS(query, args)
+	query = tx.db.prepareQuery(query)
 	args = flatArgs(args)
 	tx.lock()
 	tx.lastSql = &query
@@ -152,6 +154,7 @@ func (tx *Tx) Exec(query string, args ...any) *ExecResult {
 
 func (tx *Tx) Query(query string, args ...any) *QueryResult {
 	query, args = tx.db.rewriteFTS(query, args)
+	query = tx.db.prepareQuery(query)
 	args = flatArgs(args)
 	// Query in Tx doesn't acquire lock unless it's already held by a previous write
 	tx.lastSql = &query

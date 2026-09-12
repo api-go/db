@@ -7,7 +7,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
+	"os/user"
 	"regexp"
 	"strings"
 	"sync"
@@ -39,6 +41,8 @@ type Config struct {
 	MaxLifeTime   int
 	LogSlow       config.Duration
 	Redis         string
+	autoLocal     bool
+	localUser     string
 	logger        *log.Logger
 }
 
@@ -108,7 +112,20 @@ func isFileDB(typ string) bool {
 	return fileDBs[typ]
 }
 
+func isNetworkDBShorthand(setting string) bool {
+	switch setting {
+	case "mysql", "pg", "pgsql", "postgres", "postgresql", "pgx":
+		return true
+	default:
+		return false
+	}
+}
+
 func (dbInfo *Config) ConfigureBy(setting string) {
+	setting = strings.TrimSpace(setting)
+	if isNetworkDBShorthand(setting) {
+		setting += "://"
+	}
 	urlInfo, err := url.Parse(setting)
 	if err != nil {
 		if dbInfo.logger != nil {
@@ -136,6 +153,37 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 	}
 	dbInfo.User = urlInfo.User.Username()
 	dbInfo.Password, _ = urlInfo.User.Password()
+	if isPostgresType(dbInfo.Type) {
+		if dbInfo.Host == "" {
+			dbInfo.Host = "127.0.0.1:5432"
+		} else if urlInfo.Port() == "" {
+			dbInfo.Host = net.JoinHostPort(urlInfo.Hostname(), "5432")
+		}
+		if dbInfo.DB == "" {
+			dbInfo.DB = "postgres"
+		}
+		if dbInfo.User == "" {
+			if current, currentErr := user.Current(); currentErr == nil {
+				dbInfo.User = current.Username
+			}
+		}
+	} else if dbInfo.Type == "mysql" {
+		dbInfo.autoLocal = urlInfo.Host == "" && dbInfo.User == ""
+		if dbInfo.Host == "" {
+			dbInfo.Host = "127.0.0.1:3306"
+		} else if urlInfo.Port() == "" {
+			dbInfo.Host = net.JoinHostPort(urlInfo.Hostname(), "3306")
+		}
+		if dbInfo.DB == "" {
+			dbInfo.DB = "apigo"
+		}
+		if dbInfo.User == "" {
+			dbInfo.User = "root"
+			if current, currentErr := user.Current(); currentErr == nil {
+				dbInfo.localUser = current.Username
+			}
+		}
+	}
 
 	q := urlInfo.Query()
 	dbInfo.MaxIdles = cast.Int(q.Get("maxIdles"))
@@ -181,6 +229,12 @@ func (dbInfo *Config) ConfigureBy(setting string) {
 	if len(args) > 0 {
 		dbInfo.Args = strings.Join(args, "&")
 	}
+}
+
+// LocalAuthFallback reports whether an abbreviated local MySQL configuration
+// may try the operating-system user over a local Unix socket.
+func (dbInfo *Config) LocalAuthFallback() (string, bool) {
+	return dbInfo.localUser, dbInfo.autoLocal && dbInfo.localUser != ""
 }
 
 type DB struct {
@@ -320,7 +374,7 @@ func (db *DB) NextID(table string) string {
 	switch db.Config.Type {
 	case "mysql":
 		return maker.GetForMysql(ts.IdSize)
-	case "postgres", "pgx":
+	case "pg", "pgsql", "postgres", "postgresql", "pgx":
 		return maker.GetForPostgreSQL(ts.IdSize)
 	default:
 		return maker.Get(ts.IdSize)
@@ -491,7 +545,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 	}
 
 	var conf *Config
-	if strings.Contains(name, "://") {
+	if strings.Contains(name, "://") || isNetworkDBShorthand(name) {
 		conf = new(Config)
 		conf.logger = logger
 		conf.ConfigureBy(name)
@@ -544,6 +598,7 @@ func getDB(name string, logger *log.Logger, useCache bool) *DB {
 		if !isFileDB(conf.Type) && conf.Host != "127.0.0.1:3306" && conf.User == "root" {
 			logger.Warning("password is empty")
 		}
+		conf.pwd = safe.NewSafeBuf(nil)
 	}
 	conf.Password = ""
 
@@ -713,6 +768,7 @@ func (db *DB) GetOriginDB() *sql.DB {
 }
 
 func (db *DB) Prepare(query string) *Stmt {
+	query = db.prepareQuery(query)
 	stmt := basePrepare(db.conn, nil, query)
 	stmt.logger = db.logger
 	stmt.sqliteMu = db.sqliteMu
@@ -747,6 +803,7 @@ func (db *DB) Exec(query string, args ...any) *ExecResult {
 		return db.schemaTx.Exec(query, args...)
 	}
 	query, args = db.rewriteFTS(query, args)
+	query = db.prepareQuery(query)
 	args = flatArgs(args)
 	db.lock()
 	r := baseExecRaw(db.conn, nil, query, args...)
@@ -771,6 +828,7 @@ func (db *DB) Query(query string, args ...any) *QueryResult {
 		return db.schemaTx.Query(query, args...)
 	}
 	query, args = db.rewriteFTS(query, args)
+	query = db.prepareQuery(query)
 	args = flatArgs(args)
 	r := baseQueryRaw(db.conn, nil, query, args...)
 	r.logger = db.logger

@@ -1,5 +1,12 @@
 # @go/db 测试报告
 
+## v1.5.18 PostgreSQL/MySQL 验证
+- 单元测试覆盖网络数据库简写、默认 host/端口/库/用户和 PostgreSQL SQL/Schema 转换。
+- PostgreSQL 18.6：真实 TCP 零配置连接及不存在数据库自动创建通过。
+- MySQL 26.7：`mysql` 使用 root 空密码经本机 TCP 连接、自动创建 `apigo` 并查询通过。
+- MariaDB 12.3：默认 TCP root 被 unix_socket 插件拒绝后，受控回退当前系统用户 Unix socket、自动创建 `apigo` 并查询通过。
+- `go test -v ./...`、`go test -bench=. ./...`、`go vet ./...` 与 `git diff --check` 通过。
+
 ## Unreleased IPv6 参数绑定
 - `TestMakeKeysVarsValuesBindsIPv6Loopback` 验证 `::1` 始终作为参数值绑定，不会被解释为 SQL 表达式。
 
