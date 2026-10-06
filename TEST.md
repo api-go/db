@@ -1,5 +1,14 @@
 # @go/db 测试报告
 
+## v1.5.21 验证（2026-10-06）
+- 环境：Apple M3 Max，darwin/arm64；所有命令使用 GOWORK=off，测试实际发布依赖。
+- TestSQLiteFTSStringPrimaryKeyAndLegacyTriggerMigration 覆盖字符串主键 CRUD、别名全文查询、旧触发器迁移与回填、重复同步、全文字段替换/删除以及事务回滚保留检索。
+- go test -v ./... 通过（db 0.689s）；go test -bench=. ./... 通过（db 2.819s）。
+- go test -race ./... 通过（db 2.049s）；go vet ./... 通过。
+- BenchmarkForPool-16：4547 ns/op；BenchmarkForPoolParallel-16：8214 ns/op。
+- mysql/pgx 驱动包编译通过，但本次未执行外部 MySQL/PostgreSQL 服务集成；本次 Schema 行为变更仅针对 SQLite。
+- README API 使用 go doc 与导出源码核对；当前工作区未提供 ai/tools/getExports。
+
 ## v1.5.20 公共默认语义
 - 覆盖裸 MySQL 不选择数据库、裸 PostgreSQL 使用 `postgres`，以及 `mysql:///apigo`、`pgx:///apigo` 的显式库解析和自动创建。
 

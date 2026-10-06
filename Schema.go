@@ -396,6 +396,19 @@ func (db *DB) Sync(desc string) error {
 
 // CheckTable 检查并同步单个表结构
 func (db *DB) CheckTable(table *TableStruct) error {
+	if strings.HasPrefix(db.Config.Type, "sqlite") && db.schemaTx == nil {
+		tx := db.Begin()
+		if tx.Error != nil {
+			return tx.Error
+		}
+		defer tx.CheckFinished()
+		runner := *db
+		runner.schemaTx = tx
+		if err := runner.CheckTable(table); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
 	if err := table.prepareIndexes(); err != nil {
 		return err
 	}
@@ -782,7 +795,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		}
 
 		if len(actions) == 0 {
-			goto SYNC_SHADOW
+			goto SYNC_FTS
 		}
 
 		tx := db.schemaTx
@@ -792,6 +805,14 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		}
 		var res *ExecResult
 		if strings.HasPrefix(db.Config.Type, "sqlite") || isPostgres {
+			if strings.HasPrefix(db.Config.Type, "sqlite") {
+				// Remove references before ALTER drops or renames token columns.
+				for _, suffix := range []string{"_ai", "_ad", "_au"} {
+					if res := tx.Exec("DROP TRIGGER IF EXISTS " + db.Quote(table.Name+"_fts"+suffix)); res.Error != nil {
+						return res.Error
+					}
+				}
+			}
 			for _, action := range actions {
 				res = tx.Exec(action)
 				if res.Error != nil {
@@ -873,19 +894,53 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		}
 	}
 
+SYNC_FTS:
+	if len(ftsFields) == 0 && strings.HasPrefix(db.Config.Type, "sqlite") {
+		for _, suffix := range []string{"_ai", "_ad", "_au"} {
+			if res := db.schemaTx.Exec("DROP TRIGGER IF EXISTS " + db.Quote(table.Name+"_fts"+suffix)); res.Error != nil {
+				return res.Error
+			}
+		}
+		if res := db.schemaTx.Exec("DROP TABLE IF EXISTS " + db.Quote(table.Name+"_fts")); res.Error != nil {
+			return res.Error
+		}
+	}
 	if len(ftsFields) > 0 && strings.HasPrefix(db.Config.Type, "sqlite") {
 		ftsTableName := table.Name + "_fts"
 		ftsInfo := db.Query("SELECT \"name\" FROM \"sqlite_master\" WHERE \"type\"='table' AND \"name\"='" + ftsTableName + "'").MapOnR1()
-		if ftsInfo["name"] == nil {
+		triggerInfo := db.Query("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?", ftsTableName+"_ai").MapOnR1()
+		columnResult := db.Query("SELECT name FROM pragma_table_info(?)", ftsTableName)
+		oldColumns := columnResult.StringsOnC1()
+		if columnResult.Error != nil {
+			return columnResult.Error
+		}
+		columnsChanged := strings.Join(oldColumns, "\x00") != strings.Join(ftsFields, "\x00")
+		if ftsInfo["name"] == nil || columnsChanged || !strings.Contains(cast.String(triggerInfo["sql"]), "new.rowid") {
+			tx := db.schemaTx
+			owned := tx == nil
+			if owned {
+				tx = db.Begin()
+				if tx.Error != nil {
+					return tx.Error
+				}
+				defer tx.CheckFinished()
+			}
 			// 创建 FTS 虚拟表
-			if res := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE \"%s\" USING fts5(%s, tokenize='unicode61')", ftsTableName, strings.Join(ftsFields, ", "))); res.Error != nil {
+			if columnsChanged {
+				if res := tx.Exec("DROP TABLE IF EXISTS " + db.Quote(ftsTableName)); res.Error != nil {
+					return res.Error
+				}
+			}
+			if res := tx.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS \"%s\" USING fts5(%s, tokenize='unicode61')", ftsTableName, strings.Join(ftsFields, ", "))); res.Error != nil {
 				return res.Error
 			}
-
-			idField := "id"
-			if len(pks) > 0 {
-				idField = pks[0]
+			for _, suffix := range []string{"_ai", "_ad", "_au"} {
+				if res := tx.Exec("DROP TRIGGER IF EXISTS " + db.Quote(ftsTableName+suffix)); res.Error != nil {
+					return res.Error
+				}
 			}
+			// FTS5 rowid is always an integer; business primary keys may be strings.
+			idField := "rowid"
 
 			// AI Trigger
 			newFtsFields := make([]string, 0, len(ftsFields))
@@ -894,14 +949,14 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			}
 			aiSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ai\" AFTER INSERT ON \"%s\" BEGIN INSERT INTO \"%s\"(rowid, %s) VALUES (new.%s, %s); END;",
 				ftsTableName, table.Name, ftsTableName, strings.Join(ftsFields, ", "), idField, strings.Join(newFtsFields, ", "))
-			if res := db.Exec(aiSql); res.Error != nil {
+			if res := tx.Exec(aiSql); res.Error != nil {
 				return res.Error
 			}
 
 			// AD Trigger
 			adSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_ad\" AFTER DELETE ON \"%s\" BEGIN DELETE FROM \"%s\" WHERE rowid = old.%s; END;",
 				ftsTableName, table.Name, ftsTableName, idField)
-			if res := db.Exec(adSql); res.Error != nil {
+			if res := tx.Exec(adSql); res.Error != nil {
 				return res.Error
 			}
 
@@ -912,12 +967,23 @@ func (db *DB) CheckTable(table *TableStruct) error {
 			}
 			auSql := fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS \"%s_au\" AFTER UPDATE ON \"%s\" BEGIN UPDATE \"%s\" SET %s WHERE rowid = old.%s; END;",
 				ftsTableName, table.Name, ftsTableName, strings.Join(updateSets, ", "), idField)
-			if res := db.Exec(auSql); res.Error != nil {
+			if res := tx.Exec(auSql); res.Error != nil {
 				return res.Error
+			}
+			if res := tx.Exec("DELETE FROM " + db.Quote(ftsTableName)); res.Error != nil {
+				return res.Error
+			}
+			columns := strings.Join(ftsFields, ", ")
+			if res := tx.Exec(fmt.Sprintf("INSERT INTO %s(rowid, %s) SELECT rowid, %s FROM %s", db.Quote(ftsTableName), columns, columns, db.Quote(table.Name))); res.Error != nil {
+				return res.Error
+			}
+			if owned {
+				if err := tx.Commit(); err != nil {
+					return err
+				}
 			}
 		}
 	}
-SYNC_SHADOW:
 	if table.ShadowDelete && !strings.HasSuffix(table.Name, "_deleted") {
 		table.HasShadowTable = true
 		shadowTable := *table

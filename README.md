@@ -79,6 +79,10 @@ dbInst.Sync(schema) // 自动创建 users 和 users_deleted 表及索引
 
 
 ### 4. 事务
+SQLite FTS5 使用数据表的整数 `rowid` 关联全文记录，业务主键可为字符串。Schema 同步会迁移旧的业务主键关联触发器，并在事务中回填已有 token；字段不变的同步也会检查该迁移。LIKE 到 FTS 的查询映射同样使用 `rowid`。
+
+SQLite 单表 Schema 同步将字段、FTS 表和触发器变更放在同一事务中。删除 token 列前解除旧触发器引用；全文字段集合变化时重建并回填 FTS，移除最后一个全文字段时清理 FTS 表和触发器。事务回滚保留原有字段和全文检索。
+
 SQLite 的 `tx.Sync(schema)` 可将物理 Schema 修改与同事务的数据／元数据修改一起提交。出错后调用方必须回滚；底层 Schema 缓存仅在成功提交后失效。其他数据库暂不支持该事务内同步入口。
 
 ```go

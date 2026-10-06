@@ -1006,17 +1006,12 @@ func (db *DB) getFTSMatchSQLParts(query string, field string) (string, string) {
 		return fmt.Sprintf("%s @@ to_tsquery('simple', ", tokensField), ")"
 	case "sqlite", "sqlite3":
 		tableName := db.extractTableName(query, field)
-		idField := "id"
-		ts := db.getTable(tableName)
-		if ts.IdField != "" {
-			idField = ts.IdField
-		}
 		prefix := ""
 		dotParts := strings.Split(field, ".")
 		if len(dotParts) > 1 {
 			prefix = dotParts[0] + "."
 		}
-		return fmt.Sprintf("%s%s IN (SELECT rowid FROM \"%s_fts\" WHERE \"%s_tokens\" MATCH ", prefix, idField, tableName, colName), ")"
+		return fmt.Sprintf("%srowid IN (SELECT rowid FROM \"%s_fts\" WHERE \"%s_tokens\" MATCH ", prefix, tableName, colName), ")"
 	default:
 		return fmt.Sprintf("%s LIKE ", field), ""
 	}
