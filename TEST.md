@@ -1,5 +1,12 @@
 # @go/db 测试报告
 
+## Unreleased — mixed SQLite values (2026-10-07)
+
+- TestQueryDynamicStorageClasses covers maps, slices, interface struct fields, scalar interfaces, NULL and explicit float destinations. The original scanner fails on integer followed by 0.125; the fixed scanner passes.
+- Focused TestQueryDynamicStorageClasses and TestGenericQuery passed; no full suite or external database integration claimed.
+- 2026-10-08：`GOWORK=off go test . -run '^(TestQueryDynamicStorageClasses|TestGenericQuery)$' -count=1` passed (0.875s). Local commit only; no release tag, push, full release suite or benchmarks in this handoff.
+
+
 ## v1.5.21 验证（2026-10-06）
 - 环境：Apple M3 Max，darwin/arm64；所有命令使用 GOWORK=off，测试实际发布依赖。
 - TestSQLiteFTSStringPrimaryKeyAndLegacyTriggerMigration 覆盖字符串主键 CRUD、别名全文查询、旧触发器迁移与回填、重复同步、全文字段替换/删除以及事务回滚保留检索。
@@ -84,3 +91,5 @@
 - **OS**: darwin (macOS)
 - **Go Version**: 1.26.4
 - **Primary Driver**: modernc.org/sqlite
+
+Unreleased datetime regression: declared DATETIME values retain time and fractional seconds; DATE remains date-only. Interface SQL temporal values retain the existing textual contract. TestQueryDateTimePreservesTime fails with the old date-first matching and passes with datetime-first normalization.

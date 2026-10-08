@@ -1,5 +1,10 @@
 # 变更记录 - @go/db
 
+## Unreleased
+
+- Preserve per-row SQL storage types for interface destinations instead of fixing the scan type from the first row; prevent mixed integer/fractional result loss and interface-field reflection panic. Propagate row iteration errors.
+
+
 ## [v1.5.21] - 2026-10-06
 - SQLite FTS5 使用整数 rowid 关联全文记录，支持字符串业务主键；Schema 同步迁移旧触发器并回填已有 token。
 - SQLite 单表 Schema、FTS 表及触发器同步纳入同一事务；全文字段增删时重建、回填或清理索引，失败回滚保留原始结构。
@@ -191,3 +196,5 @@
 ### 修复
 - 修复了 `Tx` 结构体中的拼写错误 `isCommitedOrRollbacked` 为 `isCommittedOrRollbacked`。
 - 统一了全模块的参数命名规范：`requestSql` -> `query`，`wheres` -> `conditions`。
+
+Unreleased datetime regression: declared DATETIME values retain time and fractional seconds; DATE remains date-only. Interface SQL temporal values retain the existing textual contract. TestQueryDateTimePreservesTime fails with the old date-first matching and passes with datetime-first normalization.

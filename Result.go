@@ -318,6 +318,8 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 		}
 	}
 
+	// Interface destinations retain each row's driver value. SQLite ScanType
+	// may describe only the first value, not later numeric storage classes.
 	scanValues := make([]any, colNum)
 	var fieldInfos []struct {
 		index []int
@@ -339,7 +341,7 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 				fieldInfos[colIndex].typ = field.Type
 				fieldInfos[colIndex].name = publicColName
 				if field.Type.Kind() == reflect.Interface {
-					scanValues[colIndex] = makeValue(colTypes[colIndex].ScanType())
+					scanValues[colIndex] = new(any)
 				} else {
 					scanValues[colIndex] = makeValue(field.Type)
 				}
@@ -351,7 +353,7 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 	} else if rowType.Kind() == reflect.Map {
 		for colIndex := range colTypes {
 			if rowType.Elem().Kind() == reflect.Interface {
-				scanValues[colIndex] = makeValue(colTypes[colIndex].ScanType())
+				scanValues[colIndex] = new(any)
 			} else {
 				scanValues[colIndex] = makeValue(rowType.Elem())
 			}
@@ -359,14 +361,14 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 	} else if rowType.Kind() == reflect.Slice {
 		for colIndex := range colTypes {
 			if rowType.Elem().Kind() == reflect.Interface {
-				scanValues[colIndex] = makeValue(colTypes[colIndex].ScanType())
+				scanValues[colIndex] = new(any)
 			} else {
 				scanValues[colIndex] = makeValue(rowType.Elem())
 			}
 		}
 	} else {
 		if rowType.Kind() == reflect.Interface {
-			scanValues[0] = makeValue(colTypes[0].ScanType())
+			scanValues[0] = new(any)
 		} else {
 			scanValues[0] = makeValue(rowType)
 		}
@@ -399,7 +401,9 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 				valuePtr := reflect.ValueOf(scanValues[colIndex]).Elem()
 				if !valuePtr.IsNil() {
 					val := valuePtr.Elem()
-					if fInfo.typ.String() == "time.Time" {
+					if field.Kind() == reflect.Interface {
+						field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val))
+					} else if fInfo.typ.String() == "time.Time" {
 						str := val.String()
 						tm, err := time.Parse("2006-01-02 15:04:05.000000", str)
 						if err != nil {
@@ -486,6 +490,7 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 				}
 			}
 		} else {
+			data = reflect.Zero(rowType)
 			valuePtr := reflect.ValueOf(scanValues[0]).Elem()
 			if !valuePtr.IsNil() {
 				data = fixValue(colTypes[0].Name(), colTypes[0].DatabaseTypeName(), valuePtr.Elem())
@@ -504,6 +509,10 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
 	if isNew && resultsValue.IsValid() {
 		reflect.ValueOf(results).Elem().Set(resultsValue)
 	}
@@ -511,13 +520,13 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 }
 
 func fixValue(colName string, colType string, v reflect.Value) reflect.Value {
+	// SQL temporal values keep the established textual result contract.
+	if v.IsValid() && v.Type() == reflect.TypeOf(time.Time{}) {
+		v = reflect.ValueOf(v.Interface().(time.Time).Format(time.RFC3339Nano))
+	}
 	if v.Kind() == reflect.String {
 		str := v.String()
 		switch {
-		case strings.Contains(colType, "DATE"):
-			if len(str) >= 10 && str[4] == '-' && str[7] == '-' {
-				return reflect.ValueOf(str[:10])
-			}
 		case strings.Contains(colType, "DATETIME"):
 			if len(str) >= 19 && str[10] == 'T' && str[4] == '-' && str[7] == '-' && str[13] == ':' && str[16] == ':' {
 				str = strings.TrimRight(str, "Z")
@@ -525,6 +534,10 @@ func fixValue(colName string, colType string, v reflect.Value) reflect.Value {
 					return reflect.ValueOf(str[:10] + " " + str[11:])
 				}
 				return reflect.ValueOf(str[:10] + " " + str[11:19])
+			}
+		case strings.Contains(colType, "DATE"):
+			if len(str) >= 10 && str[4] == '-' && str[7] == '-' {
+				return reflect.ValueOf(str[:10])
 			}
 		case strings.Contains(colType, "TIME"):
 			if len(str) >= 8 && str[2] == ':' && str[4] == ':' {
