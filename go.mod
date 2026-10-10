@@ -9,8 +9,8 @@ require (
 	apigo.cc/go/file v1.5.9
 	apigo.cc/go/id v1.5.9
 	apigo.cc/go/jsmod v1.5.5
-	apigo.cc/go/log v1.5.16
-	apigo.cc/go/redis v1.5.19
+	apigo.cc/go/log v1.5.17
+	apigo.cc/go/redis v1.5.20
 	apigo.cc/go/safe v1.5.4
 	apigo.cc/go/shell v1.5.8
 	github.com/go-sql-driver/mysql v1.10.0

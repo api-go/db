@@ -105,3 +105,7 @@ if tx.Error == nil {
 Interface result destinations (`map[string]any`, `[][]any`, interface struct fields and `[]any`) preserve each row's native SQL value, including mixed SQLite integer/real values and NULL. Explicit typed destinations retain normal SQL conversion.
 
 Unreleased datetime regression: declared DATETIME values retain time and fractional seconds; DATE remains date-only. Interface SQL temporal values retain the existing textual contract. TestQueryDateTimePreservesTime fails with the old date-first matching and passes with datetime-first normalization.
+
+## v1.5.22 依赖基线
+
+本版本对齐 Log v1.5.17 与发布时模块索引中的上游已发布依赖；公开 API 保持兼容。

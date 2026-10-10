@@ -1,5 +1,8 @@
 # 变更记录 - @go/db
 
+## [v1.5.22] - 2026-10-10
+- 对齐 Log v1.5.17 及当前已发布的上游依赖。
+
 ## Unreleased
 
 - Preserve per-row SQL storage types for interface destinations instead of fixing the scan type from the first row; prevent mixed integer/fractional result loss and interface-field reflection panic. Propagate row iteration errors.

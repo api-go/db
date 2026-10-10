@@ -93,3 +93,13 @@
 - **Primary Driver**: modernc.org/sqlite
 
 Unreleased datetime regression: declared DATETIME values retain time and fractional seconds; DATE remains date-only. Interface SQL temporal values retain the existing textual contract. TestQueryDateTimePreservesTime fails with the old date-first matching and passes with datetime-first normalization.
+
+## v1.5.22 发布验证（2026-10-10）
+
+- GOWORK=off go test -v ./... 与 go test -bench=. ./... 通过，依赖均为已发布 tag。
+- API 以 GOWORK=off go doc 与导出源码交叉核对（getExports 工具不可用）。
+
+```text
+BenchmarkForPool-16            	  254239	      4721 ns/op
+BenchmarkForPoolParallel-16    	# connection count 0 0 {"maxOpenConnections":100,"openConnections":2,"inUse":0,"idle":2,"waitCount":0,"waitDuration":0,"maxIdleClosed":17,"maxIdleTimeClosed":0,"maxLifetimeClosed":0} .
+```
