@@ -1,12 +1,15 @@
 # 变更记录 - @go/db
 
-## [v1.5.22] - 2026-10-10
-- 对齐 Log v1.5.17 及当前已发布的上游依赖。
+## [v1.5.23] - 2026-10-23
 
-## Unreleased
-
+- PostgreSQL Schema 同步按实际列、顺序、唯一性及原有截断/hash命名精确识别生成索引，在同一事务中移除已废弃的普通/唯一索引；Unique→Index→无索引生效，反向建唯一索引失败会回滚。保留主键、约束支撑索引与不匹配生成命名的外部索引；不调整公开 API 或依赖。
+- 2026-10-22：固定长度 CHAR/BPCHAR 查询字符串去除右侧存储补空格，使 PostgreSQL 空可选引用读回为空；保留前导空白及 VARCHAR/TEXT 尾空格。
+- 2026-10-22：声明为 JSON/JSONB 的查询列写入 `any` 目标时，统一解码驱动返回的字符串和字节对象/数组；保留显式 `[]byte` 目标、普通 BLOB、无效 JSON 与 NULL 的原有值。公开 API 和依赖版本不变。
 - Preserve per-row SQL storage types for interface destinations instead of fixing the scan type from the first row; prevent mixed integer/fractional result loss and interface-field reflection panic. Propagate row iteration errors.
 
+
+## [v1.5.22] - 2026-10-10
+- 对齐 Log v1.5.17 及当前已发布的上游依赖。
 
 ## [v1.5.21] - 2026-10-06
 - SQLite FTS5 使用整数 rowid 关联全文记录，支持字符串业务主键；Schema 同步迁移旧触发器并回填已有 token。

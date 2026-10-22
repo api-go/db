@@ -1,5 +1,20 @@
 # @go/db 测试报告
 
+## v1.5.23 发布验证（2026-10-23）
+
+- 使用 `GOWORK=off` 与 go.mod 已发布依赖，顺序执行完整 `go test -v ./...`、`go vet ./...`、`go test -race ./...`、`go test -bench=. ./...`；设置 `DB_TEST_POSTGRES_DSN=pgx:///apigo` 执行真实 PostgreSQL 用例。最终结果与基准见本节下方，原始日志 `/tmp/work-release-20261023-db/`。
+- `TestPostgresSchemaIndexTransitions`、`TestPostgresLongSchemaIndexTransitions` 覆盖 Unique→Index→无索引、55字节表名、反向唯一约束失败回滚、重复同步及数据留存；主键、约束支撑、外部普通索引与精确生成名称的 partial 索引保留。独立表均通过原生 DROP 清理。
+- `TestQueryFixedCharacterPaddingDoesNotCreatePhantomReferences` 覆盖 CHAR/BPCHAR 空引用、前导空白、VARCHAR/TEXT 尾空格及 map/struct 类型读回。
+- `TestQueryJSONByteStorageRetainsObjectsAndOrdinaryBinary` 覆盖 JSON/JSONB 对象/数组的字符串及字节输入、interface 字段、显式字节 map/slice、普通 BLOB、无效 JSON 与 NULL。
+- API 工具未提供，使用 `go doc -all apigo.cc/go/db` 与导出源码/README 交叉审计；本次没有新增或修改公开声明。apigo 依赖与索引已发布版本一致，无本地 replace。
+- 本次完整 test/vet/race/bench 退出码均为 0；原生 PostgreSQL 索引用例未跳过。基准结果（darwin/arm64，Apple M3 Max）：
+
+```text
+BenchmarkForPool-16            	  257647	      4381 ns/op
+```
+
+- PostgreSQL 上层台账已完成五阶段真实验证：原记录更正、跨对话新增、重复发送及陈旧 CSV 核对；账面结果不等于实物或长期经营效果。
+
 ## Unreleased — mixed SQLite values (2026-10-07)
 
 - TestQueryDynamicStorageClasses covers maps, slices, interface struct fields, scalar interfaces, NULL and explicit float destinations. The original scanner fails on integer followed by 0.125; the fixed scanner passes.

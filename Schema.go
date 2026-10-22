@@ -366,6 +366,14 @@ func postgresFieldType(fieldType string) string {
 	}
 }
 
+func boundedSchemaIndexName(name string) string {
+	if len(name) > 60 {
+		hash := md5.Sum([]byte(name))
+		return name[:53] + "_" + hex.EncodeToString(hash[:])[:6]
+	}
+	return name
+}
+
 // Sync 根据 Schema 描述文本同步数据库结构
 func (db *DB) Sync(desc string) error {
 	groups := ParseSchema(desc)
@@ -497,11 +505,7 @@ func (db *DB) CheckTable(table *TableStruct) error {
 				}
 
 				// 防超长截断处理 (最大 64，留 4 个给安全余量，设为 60)
-				if len(keyName) > 60 {
-					hash := md5.Sum([]byte(keyName))
-					hashStr := hex.EncodeToString(hash[:])[:6]
-					keyName = keyName[:53] + "_" + hashStr
-				}
+				keyName = boundedSchemaIndexName(keyName)
 
 				keySetFields[keyName] = strings.Join(groupDef.Fields, " ")
 
@@ -564,6 +568,8 @@ func (db *DB) CheckTable(table *TableStruct) error {
 		oldFields := make(map[string]*tableFieldDesc)
 		oldIndexes := make(map[string]string)
 		oldUniqueMap := make(map[string]bool)
+		protectedPostgresIndexes := make(map[string]bool)
+		managedPostgresIndexes := make(map[string]bool)
 		oldIndexInfos := make([]*tableKeyDesc, 0)
 		oldComments := map[string]string{}
 
@@ -638,13 +644,39 @@ func (db *DB) CheckTable(table *TableStruct) error {
 				})
 			}
 			tmpIndexes := []struct {
-				Indexname string
-				Indexdef  string
+				Indexname   string
+				Indexdef    string
+				Constrained bool
+				Fields      []string
+				Unique      bool
+				Standard    bool
 			}{}
-			db.Query("SELECT indexname, indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='" + table.Name + "'").To(&tmpIndexes)
+			if err := db.Query(`SELECT p.indexname, p.indexdef,
+EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid=(quote_ident(p.schemaname)||'.'||quote_ident(p.indexname))::regclass) constrained,
+i.indisunique AS unique,
+(am.amname='btree' AND i.indexprs IS NULL AND i.indpred IS NULL AND i.indnatts=i.indnkeyatts) standard,
+array_to_json(ARRAY(SELECT CASE WHEN (i.indoption[k.ord-1] & 1)=1 THEN '-' ELSE '' END || a.attname
+FROM unnest(i.indkey) WITH ORDINALITY k(attnum,ord)
+JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum
+WHERE k.ord<=i.indnkeyatts ORDER BY k.ord)) fields
+FROM pg_indexes p JOIN pg_index i ON i.indexrelid=(quote_ident(p.schemaname)||'.'||quote_ident(p.indexname))::regclass
+JOIN pg_class ix ON ix.oid=i.indexrelid JOIN pg_am am ON am.oid=ix.relam
+WHERE p.schemaname='public' AND p.tablename=?`, table.Name).To(&tmpIndexes); err != nil {
+				return err
+			}
 			for _, i := range tmpIndexes {
-				// Parse indexdef to get columns if needed, simplified for now
-				oldIndexes[i.Indexname] = "" // Placeholder
+				oldIndexes[i.Indexname] = i.Indexdef
+				protectedPostgresIndexes[i.Indexname] = i.Constrained
+				if i.Standard && len(i.Fields) > 0 {
+					kind, prefix := "index", "ik_"
+					if i.Unique {
+						kind, prefix = "unique", "uk_"
+					}
+					legacy := boundedSchemaIndexName(prefix + table.Name + "_" + strings.Join(i.Fields, "_"))
+					hash := md5.Sum([]byte(kind + "\x00" + strings.Join(i.Fields, "\x00")))
+					standalone := boundedSchemaIndexName(prefix + table.Name + "_" + hex.EncodeToString(hash[:])[:16])
+					managedPostgresIndexes[i.Indexname] = i.Indexname == legacy || i.Indexname == standalone
+				}
 			}
 		} else if db.Config.Type == "mysql" {
 			_ = db.Query("SELECT column_name, column_comment FROM information_schema.columns WHERE TABLE_SCHEMA='" + db.Config.DB + "' AND TABLE_NAME='" + table.Name + "'").ToKV(&oldComments)
@@ -675,6 +707,11 @@ func (db *DB) CheckTable(table *TableStruct) error {
 
 		actions := make([]string, 0)
 		for keyId := range oldIndexes {
+			if isPostgres && keySetBy[keyId] == "" && !protectedPostgresIndexes[keyId] && managedPostgresIndexes[keyId] {
+				// Only db's table-scoped generated indexes belong to this schema.
+				// Primary/unique constraint indexes and external names are retained.
+				actions = append(actions, "DROP INDEX "+db.Quote("public")+"."+db.Quote(keyId))
+			}
 			if keyId != "PRIMARY" && !isPostgres && strings.ToLower(keySetFields[keyId]) != strings.ToLower(oldIndexes[keyId]) {
 				if strings.HasPrefix(db.Config.Type, "sqlite") {
 					if table.Name == "_Table" || table.Name == "_Field" || table.Name == "_Table_deleted" || table.Name == "_Field_deleted" {

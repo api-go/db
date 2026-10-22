@@ -32,6 +32,7 @@ go get apigo.cc/go/db
   - 目标数据库不存在且当前账户具备权限时会自动创建并重连。MySQL/MariaDB 零配置首次启动若尚无 `apigo` TCP 账户，会通过本机 Unix socket 的管理员身份创建仅限 localhost/127.0.0.1 的空密码 `apigo` 账户并授权目标库，随后立即改用 TCP；显式 DSN 不触发该引导。
 - **`Sync(schema string) error`**
   - 解析 DSL 并同步数据库表结构。用于创建表（包括 `_deleted` 表）和索引。详见 [架构 DSL 指南](./DSL.md)。
+  - PostgreSQL 普通/唯一索引变更在同一事务中移除废弃的框架生成索引（包括长名称 hash），创建失败回滚；主键、约束支撑索引与非生成命名的外部索引保留。只识别无表达式、无条件、无 INCLUDE 的 btree 普通列索引；其他外部结构均保留。外部索引应使用独立名称，避免与框架按类型、表名和实际列生成的保留名称完全相同。此规则不扩张 PostgreSQL 列类型迁移或表达式全文索引迁移能力。
 
 ### 2. 写操作 (返回 `*ExecResult`)
 - **`Insert/Replace(table string, data any)`**: 插入或替换数据。若表包含 `autoVersion` 字段，会自动注入初始版本号。
@@ -103,6 +104,10 @@ if tx.Error == nil {
 - [版本变更记录](./CHANGELOG.md)
 
 Interface result destinations (`map[string]any`, `[][]any`, interface struct fields and `[]any`) preserve each row's native SQL value, including mixed SQLite integer/real values and NULL. Explicit typed destinations retain normal SQL conversion.
+
+v1.5.23：声明为 JSON/JSONB 的查询列写入 `any` 目标时，驱动返回的字符串或 `[]byte` 对象/数组均解码为 Go 对象/数组；显式 `[]byte` 目标保留原始字节，普通 BLOB、无效 JSON 与 NULL 保持原值。公开 API 与依赖版本不变。已验证真实 PostgreSQL 的配置对象读回与原生账号创建；完整上层业务验收另行记录。
+
+v1.5.23：固定长度 CHAR/BPCHAR 查询字符串去除右侧存储补空格，空可选引用不会变成全空格标识；前导空白和 VARCHAR/TEXT 尾空格保持不变。
 
 Unreleased datetime regression: declared DATETIME values retain time and fractional seconds; DATE remains date-only. Interface SQL temporal values retain the existing textual contract. TestQueryDateTimePreservesTime fails with the old date-first matching and passes with datetime-first normalization.
 

@@ -402,7 +402,7 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 				if !valuePtr.IsNil() {
 					val := valuePtr.Elem()
 					if field.Kind() == reflect.Interface {
-						field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val))
+						field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val, field.Type()))
 					} else if fInfo.typ.String() == "time.Time" {
 						str := val.String()
 						tm, err := time.Parse("2006-01-02 15:04:05.000000", str)
@@ -418,7 +418,7 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 								if field.Type().AssignableTo(val.Type()) {
 									field.Set(val.Addr())
 								} else if val.Type().String() == "string" {
-									strVal := fixValue(col.Name(), col.DatabaseTypeName(), val)
+									strVal := fixValue(col.Name(), col.DatabaseTypeName(), val, field.Type())
 									field.Set(reflect.New(field.Type().Elem()))
 									field.Elem().SetString(cast.String(strVal.Interface()))
 								} else if strings.Contains(field.Type().String(), "uint") {
@@ -449,12 +449,12 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 						}
 					} else if field.Type().AssignableTo(val.Type()) {
 						if val.Kind() == reflect.String {
-							field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val))
+							field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val, field.Type()))
 						} else {
 							field.Set(val)
 						}
 					} else if val.Type().String() == "string" {
-						field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val))
+						field.Set(fixValue(col.Name(), col.DatabaseTypeName(), val, field.Type()))
 					} else if strings.Contains(val.Type().String(), "int") {
 						field.SetInt(val.Int())
 					} else if strings.Contains(val.Type().String(), "float") {
@@ -474,9 +474,9 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 			for colIndex, col := range colTypes {
 				valuePtr := reflect.ValueOf(scanValues[colIndex]).Elem()
 				if !valuePtr.IsNil() {
-					data.SetMapIndex(reflect.ValueOf(col.Name()), fixValue(col.Name(), col.DatabaseTypeName(), valuePtr.Elem()))
+					data.SetMapIndex(reflect.ValueOf(col.Name()), fixValue(col.Name(), col.DatabaseTypeName(), valuePtr.Elem(), rowType.Elem()))
 				} else {
-					data.SetMapIndex(reflect.ValueOf(col.Name()), fixValue(col.Name(), col.DatabaseTypeName(), reflect.New(rowType.Elem()).Elem()))
+					data.SetMapIndex(reflect.ValueOf(col.Name()), fixValue(col.Name(), col.DatabaseTypeName(), reflect.New(rowType.Elem()).Elem(), rowType.Elem()))
 				}
 			}
 		} else if rowType.Kind() == reflect.Slice {
@@ -484,16 +484,16 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 			for colIndex, col := range colTypes {
 				valuePtr := reflect.ValueOf(scanValues[colIndex]).Elem()
 				if !valuePtr.IsNil() {
-					data.Index(colIndex).Set(fixValue(col.Name(), col.DatabaseTypeName(), valuePtr.Elem()))
+					data.Index(colIndex).Set(fixValue(col.Name(), col.DatabaseTypeName(), valuePtr.Elem(), rowType.Elem()))
 				} else {
-					data.Index(colIndex).Set(fixValue(col.Name(), col.DatabaseTypeName(), reflect.New(rowType.Elem()).Elem()))
+					data.Index(colIndex).Set(fixValue(col.Name(), col.DatabaseTypeName(), reflect.New(rowType.Elem()).Elem(), rowType.Elem()))
 				}
 			}
 		} else {
 			data = reflect.Zero(rowType)
 			valuePtr := reflect.ValueOf(scanValues[0]).Elem()
 			if !valuePtr.IsNil() {
-				data = fixValue(colTypes[0].Name(), colTypes[0].DatabaseTypeName(), valuePtr.Elem())
+				data = fixValue(colTypes[0].Name(), colTypes[0].DatabaseTypeName(), valuePtr.Elem(), rowType)
 			}
 		}
 
@@ -519,13 +519,36 @@ func (r *QueryResult) makeResults(results any, rows *sql.Rows) error {
 	return nil
 }
 
-func fixValue(colName string, colType string, v reflect.Value) reflect.Value {
+func fixValue(colName string, colType string, v reflect.Value, target reflect.Type) reflect.Value {
 	// SQL temporal values keep the established textual result contract.
 	if v.IsValid() && v.Type() == reflect.TypeOf(time.Time{}) {
 		v = reflect.ValueOf(v.Interface().(time.Time).Format(time.RFC3339Nano))
 	}
+	if target.Kind() == reflect.Interface && strings.Contains(strings.ToUpper(colType), "JSON") {
+		var text string
+		switch value := v.Interface().(type) {
+		case string:
+			text = value
+		case []byte:
+			text = string(value)
+		}
+		text = strings.TrimSpace(text)
+		if text != "" && (text[0] == '{' || text[0] == '[') {
+			var out any
+			if err := cast.UnmarshalJSON([]byte(text), &out); err == nil {
+				return reflect.ValueOf(out)
+			}
+		}
+	}
 	if v.Kind() == reflect.String {
 		str := v.String()
+		// PostgreSQL BPCHAR retains storage padding, including for an empty
+		// optional reference. Match other drivers' logical CHAR read values;
+		// VARCHAR/TEXT and leading whitespace remain significant.
+		typeName := strings.ToUpper(colType)
+		if typeName == "BPCHAR" || typeName == "CHAR" || typeName == "CHARACTER" || strings.HasPrefix(typeName, "CHAR(") || strings.HasPrefix(typeName, "BPCHAR(") || strings.HasPrefix(typeName, "CHARACTER(") {
+			return reflect.ValueOf(strings.TrimRight(str, " "))
+		}
 		switch {
 		case strings.Contains(colType, "DATETIME"):
 			if len(str) >= 19 && str[10] == 'T' && str[4] == '-' && str[7] == '-' && str[13] == ':' && str[16] == ':' {
@@ -545,13 +568,6 @@ func fixValue(colName string, colType string, v reflect.Value) reflect.Value {
 					return reflect.ValueOf(str[0:15])
 				}
 				return reflect.ValueOf(str[0:8])
-			}
-		case strings.Contains(colType, "JSON"):
-			if str != "" && (str[0] == '{' || str[0] == '[') {
-				var out any
-				if err := cast.UnmarshalJSON([]byte(str), &out); err == nil {
-					return reflect.ValueOf(out)
-				}
 			}
 		}
 	}
