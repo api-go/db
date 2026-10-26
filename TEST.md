@@ -118,3 +118,17 @@ Unreleased datetime regression: declared DATETIME values retain time and fractio
 BenchmarkForPool-16            	  254239	      4721 ns/op
 BenchmarkForPoolParallel-16    	# connection count 0 0 {"maxOpenConnections":100,"openConnections":2,"inUse":0,"idle":2,"waitCount":0,"waitDuration":0,"maxIdleClosed":17,"maxIdleTimeClosed":0,"maxLifetimeClosed":0} .
 ```
+
+## v1.5.24 发布验证（2026-10-26）
+
+GOWORK=off，正式依赖 crypto v1.5.9，无 replace。`go test -v ./...`、`go test -bench=. ./...`、`go vet ./...`、`go mod verify` 通过。使用 `go doc` 与源码交叉核对 API，替代 getExports。现有回归覆盖本模块业务；新旧 GCM 格式、认证失败和性能基准见 crypto v1.5.9。
+
+跳过的外部条件场景：
+- --- SKIP: TestPostgresSchemaIndexTransitions (0.00s)
+- --- SKIP: TestPostgresLongSchemaIndexTransitions (0.00s)
+
+基准结果：
+```text
+BenchmarkForPool-16            	  249373	      4820 ns/op
+BenchmarkForPoolParallel-16    	# connection count 0 0 {"maxOpenConnections":100,"openConnections":2,"inUse":0,"idle":2,"waitCount":0,"waitDuration":0,"maxIdleClosed":14,"maxIdleTimeClosed":0,"maxLifetimeClosed":0} .
+```

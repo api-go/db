@@ -5,12 +5,12 @@ go 1.25.0
 require (
 	apigo.cc/go/cast v1.5.8
 	apigo.cc/go/config v1.5.8
-	apigo.cc/go/crypto v1.5.8
+	apigo.cc/go/crypto v1.5.9
 	apigo.cc/go/file v1.5.9
 	apigo.cc/go/id v1.5.9
 	apigo.cc/go/jsmod v1.5.5
 	apigo.cc/go/log v1.5.17
-	apigo.cc/go/redis v1.5.20
+	apigo.cc/go/redis v1.5.21
 	apigo.cc/go/safe v1.5.4
 	apigo.cc/go/shell v1.5.8
 	github.com/go-sql-driver/mysql v1.10.0
