@@ -16,13 +16,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"apigo.cc/go/cast"
-	"apigo.cc/go/config"
-	"apigo.cc/go/crypto"
-	"apigo.cc/go/id"
-	"apigo.cc/go/log"
-	"apigo.cc/go/redis"
-	"apigo.cc/go/safe"
+	"github.com/api-go/cast"
+	"github.com/api-go/config"
+	"github.com/api-go/crypto"
+	"github.com/api-go/id"
+	"github.com/api-go/log"
+	"github.com/api-go/redis"
+	"github.com/api-go/safe"
 )
 
 type Config struct {

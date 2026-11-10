@@ -1,6 +1,6 @@
 package main
 
-import "apigo.cc/go/db"
+import "github.com/api-go/db"
 
 func init() {
 	// 强烈建议在应用启动时设置自定义加密密钥，确保数据库密码存储安全

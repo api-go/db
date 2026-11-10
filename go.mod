@@ -1,18 +1,18 @@
-module apigo.cc/go/db
+module github.com/api-go/db
 
 go 1.25.0
 
 require (
-	apigo.cc/go/cast v1.5.8
-	apigo.cc/go/config v1.5.8
-	apigo.cc/go/crypto v1.5.9
-	apigo.cc/go/file v1.5.9
-	apigo.cc/go/id v1.5.9
-	apigo.cc/go/jsmod v1.5.5
-	apigo.cc/go/log v1.5.17
-	apigo.cc/go/redis v1.5.21
-	apigo.cc/go/safe v1.5.4
-	apigo.cc/go/shell v1.5.8
+	github.com/api-go/cast v1.5.9
+	github.com/api-go/config v1.5.9
+	github.com/api-go/crypto v1.5.10
+	github.com/api-go/file v1.5.10
+	github.com/api-go/id v1.5.10
+	github.com/api-go/jsmod v1.5.6
+	github.com/api-go/log v1.5.18
+	github.com/api-go/redis v1.5.23
+	github.com/api-go/safe v1.5.5
+	github.com/api-go/shell v1.5.9
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/mitchellh/mapstructure v1.5.0
@@ -20,9 +20,9 @@ require (
 )
 
 require (
-	apigo.cc/go/encoding v1.5.8 // indirect
-	apigo.cc/go/rand v1.5.4 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
+	github.com/api-go/encoding v1.5.9 // indirect
+	github.com/api-go/rand v1.5.5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gomodule/redigo v1.9.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect

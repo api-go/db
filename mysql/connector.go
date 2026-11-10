@@ -9,8 +9,8 @@ import (
 	"os"
 	"regexp"
 
-	"apigo.cc/go/db"
-	"apigo.cc/go/safe"
+	"github.com/api-go/db"
+	"github.com/api-go/safe"
 	"github.com/go-sql-driver/mysql"
 )
 

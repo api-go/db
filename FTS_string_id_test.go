@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"apigo.cc/go/db"
+	"github.com/api-go/db"
 )
 
 func TestSQLiteFTSStringPrimaryKeyAndLegacyTriggerMigration(t *testing.T) {

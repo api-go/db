@@ -3,8 +3,8 @@ package db_test
 import (
 	"testing"
 
-	"apigo.cc/go/db"
-	"apigo.cc/go/file"
+	"github.com/api-go/db"
+	"github.com/api-go/file"
 	_ "modernc.org/sqlite"
 )
 

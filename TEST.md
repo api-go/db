@@ -6,7 +6,7 @@
 - `TestPostgresSchemaIndexTransitions`、`TestPostgresLongSchemaIndexTransitions` 覆盖 Unique→Index→无索引、55字节表名、反向唯一约束失败回滚、重复同步及数据留存；主键、约束支撑、外部普通索引与精确生成名称的 partial 索引保留。独立表均通过原生 DROP 清理。
 - `TestQueryFixedCharacterPaddingDoesNotCreatePhantomReferences` 覆盖 CHAR/BPCHAR 空引用、前导空白、VARCHAR/TEXT 尾空格及 map/struct 类型读回。
 - `TestQueryJSONByteStorageRetainsObjectsAndOrdinaryBinary` 覆盖 JSON/JSONB 对象/数组的字符串及字节输入、interface 字段、显式字节 map/slice、普通 BLOB、无效 JSON 与 NULL。
-- API 工具未提供，使用 `go doc -all apigo.cc/go/db` 与导出源码/README 交叉审计；本次没有新增或修改公开声明。apigo 依赖与索引已发布版本一致，无本地 replace。
+- API 工具未提供，使用 `go doc -all github.com/api-go/db` 与导出源码/README 交叉审计；本次没有新增或修改公开声明。apigo 依赖与索引已发布版本一致，无本地 replace。
 - 本次完整 test/vet/race/bench 退出码均为 0；原生 PostgreSQL 索引用例未跳过。基准结果（darwin/arm64，Apple M3 Max）：
 
 ```text
@@ -73,7 +73,7 @@ BenchmarkForPool-16            	  257647	      4381 ns/op
 - `go test -bench=. ./...`：通过完整基准测试。
 
 ## 📊 概览
-- **模块**: `apigo.cc/go/db`
+- **模块**: `github.com/api-go/db`
 - **总测试用例**: 13
 - **通过**: 13
 - **失败**: 0
@@ -132,3 +132,13 @@ GOWORK=off，正式依赖 crypto v1.5.9，无 replace。`go test -v ./...`、`go
 BenchmarkForPool-16            	  249373	      4820 ns/op
 BenchmarkForPoolParallel-16    	# connection count 0 0 {"maxOpenConnections":100,"openConnections":2,"inUse":0,"idle":2,"waitCount":0,"waitDuration":0,"maxIdleClosed":14,"maxIdleTimeClosed":0,"maxLifetimeClosed":0} .
 ```
+
+## GitHub migration validation (pending release)
+
+Module paths and internal dependency versions are migrated. Development verification uses GOWORK=off and explicit sibling replacements; remove these replacements before release. See migration validation logs for actual results. Existing unrelated working changes are preserved and require separate review.
+
+API inventory verification: `GOWORK=off go doc` succeeded; output retained in the migration validation directory. Source exports were preserved by the path migration.
+
+## GitHub release verification
+
+GOWORK=off go test -v ./... and go test -bench=. ./... passed using published GitHub dependencies, without local replacements. go mod verify passed.

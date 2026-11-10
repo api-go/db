@@ -1,3 +1,7 @@
+## [v1.5.25] - 2026-11-10
+
+- 迁移至 github.com/api-go/db，同步内部模块路径与依赖。
+
 # 变更记录 - @go/db
 
 ## v1.5.24（2026-10-26）
@@ -46,7 +50,7 @@
 - **依赖对齐**: 补齐 `config`、`file`、`log` 与 `redis` 的级联版本。
 
 ## [v1.5.14] - 2026-09-05
-- **依赖对齐**: 升级全部 `apigo.cc/go/*` 依赖至当前已发布版本。
+- **依赖对齐**: 升级全部 `github.com/api-go/*` 依赖至当前已发布版本。
 
 ## [v1.5.13] - 2026-09-04
 - 新增 SQLite Tx.Sync：复用事务连接执行 Schema DDL，提交后才使共享 Schema 缓存失效；传播提交和全文结构创建错误。
@@ -55,7 +59,7 @@
 
 ## [1.5.12] - 2026-09-03
 - **全文索引分组**: Schema DSL 支持通过 `TI<n>` 为全文索引指定分组号，与普通索引和唯一索引的分组语法保持一致。
-- **依赖对齐**: 内部 `apigo.cc/go/*` 依赖全部升级至公共索引中的最新版本，并使用 `redis v1.5.14`。
+- **依赖对齐**: 内部 `github.com/api-go/*` 依赖全部升级至公共索引中的最新版本，并使用 `redis v1.5.14`。
 
 ## [1.5.11] - 2026-08-22
 - SQLite schema 同步支持删除定义中已经移除的字段，并同步处理影子删除表。
@@ -119,8 +123,8 @@
 
 ## [1.0.11] - 2026-05-13
 - **基础设施对齐**:
-    - 移除 `encoding/json` 原生依赖，全面切换至 `apigo.cc/go/cast.UnmarshalJSON` 以增强类型兼容性。
-    - 移除测试代码中对 `os.Remove` 的直接调用，统一切换至 `apigo.cc/go/file.Remove` 以支持隔离文件系统。
+    - 移除 `encoding/json` 原生依赖，全面切换至 `github.com/api-go/cast.UnmarshalJSON` 以增强类型兼容性。
+    - 移除测试代码中对 `os.Remove` 的直接调用，统一切换至 `github.com/api-go/file.Remove` 以支持隔离文件系统。
 - **稳定性增强**:
     - 验证并更新了测试用例，确保在 Go 1.25.0 环境下的执行稳定性。
     - 更新 `TEST.md` 性能基准，反映基础设施对齐后的最新指标。
@@ -131,7 +135,7 @@
     - 优化 `cleanIdentifier`：能够更精准地剥离多段式标识符（如 `table.column`）中的包装引号。
     - 增强 `getFTSMatchSQLParts` 和 `extractTableName`：确保在各种引用风格下均能正确定位影子列和源表。
 - **基础设施对齐**:
-    - 升级 `apigo.cc/go/log` 至 `v1.3.2`。
+    - 升级 `github.com/api-go/log` 至 `v1.3.2`。
 - **测试增强**:
     - 新增 `TestComplexIdentifierFTS` 验证复杂标识符下的全文检索重定向。
     - 修复并增强 `TestAutonomousFTS` 以支持多种引用风格的兼容性测试。
@@ -146,13 +150,13 @@
 
 ## [1.0.10] - 2026-05-10
 - **基础设施对齐**: 
-    - 升级 `apigo.cc/go/redis` 至 `v1.0.8`。
+    - 升级 `github.com/api-go/redis` 至 `v1.0.8`。
     - 验证了 `redis.NewIDMaker` API 变更后的集成稳定性。
     - 增强了 ID 生成器的集成测试，覆盖了 Redis 路径。
 
 ## [1.0.9] - 2026-05-09
 - **基础设施对齐**: 
-    - 升级 `apigo.cc/go/log` 至 `v1.1.13`。
+    - 升级 `github.com/api-go/log` 至 `v1.1.13`。
     - 为 `DBInfoLog` 和 `DBErrorLog` 实现 `Reset()` 方法，以遵循 `log` 的强制 Reset 契约。
     - 调整 `DBLog` 内的字段 `pos` 索引，从 `6` 开始紧凑排列，消除索引空洞。
 - **测试增强**: 
@@ -173,7 +177,7 @@
 
 ## [1.0.4] - 2026-05-04
 ### 优化
-- **日志增强**：升级 `apigo.cc/go/log` 至 v1.0.1，并重构数据库日志逻辑，利用新版 `log.DB` API 直接支持错误字段和调用栈捕获，提升排障效率。
+- **日志增强**：升级 `github.com/api-go/log` 至 v1.0.1，并重构数据库日志逻辑，利用新版 `log.DB` API 直接支持错误字段和调用栈捕获，提升排障效率。
 
 ## [1.0.3] - 2026-05-04
 ### 新增

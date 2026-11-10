@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"apigo.cc/go/db"
-	"apigo.cc/go/file"
-	"apigo.cc/go/log"
+	"github.com/api-go/db"
+	"github.com/api-go/file"
+	"github.com/api-go/log"
 	_ "modernc.org/sqlite"
 )
 

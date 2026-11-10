@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"apigo.cc/go/db"
+	"github.com/api-go/db"
 )
 
 func TestSchemaTransactionRollbackAndCommit(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"apigo.cc/go/cast"
+	"github.com/api-go/cast"
 )
 
 var sizedSchemaType = regexp.MustCompile(`^[cv][1-9][0-9]*$`)

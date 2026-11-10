@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"apigo.cc/go/db"
-	"apigo.cc/go/safe"
+	"github.com/api-go/db"
+	"github.com/api-go/safe"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"

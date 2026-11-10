@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"apigo.cc/go/cast"
+	"github.com/api-go/cast"
 )
 
 // SchemaGroup 描述表分组

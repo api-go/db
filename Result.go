@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"apigo.cc/go/cast"
+	"github.com/api-go/cast"
 	"github.com/mitchellh/mapstructure"
 )
 

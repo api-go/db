@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"apigo.cc/go/cast"
-	"apigo.cc/go/db"
+	"github.com/api-go/cast"
+	"github.com/api-go/db"
 )
 
 func TestStandaloneIndexes(t *testing.T) {

@@ -3,7 +3,7 @@ package db
 import (
 	"testing"
 
-	"apigo.cc/go/file"
+	"github.com/api-go/file"
 	_ "modernc.org/sqlite"
 )
 

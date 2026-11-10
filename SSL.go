@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 
-	"apigo.cc/go/log"
+	"github.com/api-go/log"
 )
 
 func BuildTLSConfig(ca, cert, key []byte, insecure bool) *tls.Config {

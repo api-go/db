@@ -17,7 +17,7 @@
 ## 📦 安装
 
 ```bash
-go get apigo.cc/go/db
+go get github.com/api-go/db
 ```
 
 ## 🛠 API 指南

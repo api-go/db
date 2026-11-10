@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"apigo.cc/go/cast"
+	"github.com/api-go/cast"
 )
 
 var structFieldsCache = sync.Map{}

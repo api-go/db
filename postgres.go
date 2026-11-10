@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"apigo.cc/go/cast"
+	"github.com/api-go/cast"
 )
 
 // rewritePostgresQuery adapts the package's portable SQL convention to pgx.

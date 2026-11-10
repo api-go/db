@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"apigo.cc/go/db"
-	_ "apigo.cc/go/db/pgx"
+	"github.com/api-go/db"
+	_ "github.com/api-go/db/pgx"
 )
 
 func TestPostgresSchemaIndexTransitions(t *testing.T) {

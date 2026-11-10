@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"apigo.cc/go/db"
+	"github.com/api-go/db"
 	_ "modernc.org/sqlite"
 )
 

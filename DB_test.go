@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"apigo.cc/go/cast"
-	"apigo.cc/go/db"
-	"apigo.cc/go/file"
-	"apigo.cc/go/shell"
+	"github.com/api-go/cast"
+	"github.com/api-go/db"
+	"github.com/api-go/file"
+	"github.com/api-go/shell"
 
-	_ "apigo.cc/go/db/mysql"
+	_ "github.com/api-go/db/mysql"
 	_ "modernc.org/sqlite"
 )
 
