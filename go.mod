@@ -9,8 +9,8 @@ require (
 	github.com/api-go/file v1.5.10
 	github.com/api-go/id v1.5.10
 	github.com/api-go/jsmod v1.5.6
-	github.com/api-go/log v1.5.18
-	github.com/api-go/redis v1.5.23
+	github.com/api-go/log v1.5.19
+	github.com/api-go/redis v1.5.24
 	github.com/api-go/safe v1.5.5
 	github.com/api-go/shell v1.5.9
 	github.com/go-sql-driver/mysql v1.10.0
@@ -23,7 +23,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/api-go/encoding v1.5.9 // indirect
 	github.com/api-go/rand v1.5.5 // indirect
-	github.com/api-go/timer v1.5.1 // indirect
+	github.com/api-go/timer v1.5.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gomodule/redigo v1.9.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -42,7 +42,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-replace github.com/api-go/timer => ../timer
-
-replace github.com/api-go/log => ../log
