@@ -23,6 +23,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/api-go/encoding v1.5.9 // indirect
 	github.com/api-go/rand v1.5.5 // indirect
+	github.com/api-go/timer v1.5.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gomodule/redigo v1.9.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -41,3 +42,7 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/api-go/timer => ../timer
+
+replace github.com/api-go/log => ../log
