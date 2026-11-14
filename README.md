@@ -127,3 +127,7 @@ Unreleased datetime regression: declared DATETIME values retain time and fractio
 ### Release v1.5.26 — 2026-11-12
 
 Released GitHub dependencies; no local development replacements. Full tests and benchmarks validated with GOWORK=off.
+
+v1.5.27: dependency alignment with safe v1.5.6 / crypto v1.5.11. Development uses explicit local replacements; remove before release. Public API unchanged.
+
+Release v1.5.27: verified with published dependencies and GOWORK=off; all temporary replacements have been removed. Earlier development-validation notes describe historical local checks.

@@ -4,14 +4,14 @@ go 1.25.0
 
 require (
 	github.com/api-go/cast v1.5.9
-	github.com/api-go/config v1.5.9
-	github.com/api-go/crypto v1.5.10
-	github.com/api-go/file v1.5.10
+	github.com/api-go/config v1.5.10
+	github.com/api-go/crypto v1.5.11
+	github.com/api-go/file v1.5.11
 	github.com/api-go/id v1.5.10
 	github.com/api-go/jsmod v1.5.6
-	github.com/api-go/log v1.5.19
-	github.com/api-go/redis v1.5.24
-	github.com/api-go/safe v1.5.5
+	github.com/api-go/log v1.5.21
+	github.com/api-go/redis v1.5.25
+	github.com/api-go/safe v1.5.6
 	github.com/api-go/shell v1.5.9
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/jackc/pgx/v5 v5.9.2
